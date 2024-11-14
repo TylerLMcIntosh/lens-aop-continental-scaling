@@ -183,7 +183,8 @@ representative_categorical_cover_analysis <- function(raster,
     if(out_rast_values == "RAW" | out_rast_values == "BOTH") {
       terra::writeRaster(raster_not_represented,
                          here::here(out_dir, paste0(clean_run_name, "_not_rep_raw.tif")),
-                         overwrite = TRUE)
+                         overwrite = TRUE,
+                         gdal = c("COMPRESS=DEFLATE"))
     }
     
     if(out_rast_values == "BOTH" | out_rast_values == "PERC_COVER") {
@@ -196,7 +197,8 @@ representative_categorical_cover_analysis <- function(raster,
       
       terra::writeRaster(raster_not_represented,
                          here::here(out_dir, paste0(clean_run_name, "_not_rep_perc_cover.tif")),
-                         overwrite = TRUE)
+                         overwrite = TRUE,
+                         gdal = c("COMPRESS=DEFLATE"))
     }
     
     rm(raster_not_represented)
@@ -212,7 +214,8 @@ representative_categorical_cover_analysis <- function(raster,
     if(out_rast_values == "RAW" | out_rast_values == "BOTH") {
       terra::writeRaster(raster_represented,
                          here::here(out_dir, paste0(clean_run_name, "_rep_raw.tif")),
-                         overwrite = TRUE)
+                         overwrite = TRUE,
+                         gdal = c("COMPRESS=DEFLATE"))
     }
     
     if(out_rast_values == "BOTH" | out_rast_values == "PERC_COVER") {
@@ -226,7 +229,8 @@ representative_categorical_cover_analysis <- function(raster,
       
       terra::writeRaster(raster_represented,
                          here::here(out_dir, paste0(clean_run_name, "_rep_perc_cover.tif")),
-                         overwrite = TRUE)
+                         overwrite = TRUE,
+                         gdal = c("COMPRESS=DEFLATE"))
     }
     
     rm(raster_represented)

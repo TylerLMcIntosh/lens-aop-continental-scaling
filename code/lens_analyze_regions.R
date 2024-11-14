@@ -2,11 +2,10 @@
 
 # Setup ----
 
-cyverse = TRUE #Set to TRUE for cyverse processing or FALSE for local processing
-
-
-
 rm(list = ls())
+
+cyverse <- TRUE #Set to TRUE for cyverse processing or FALSE for local processing
+
 
 options(scipen = 999)
 
@@ -33,6 +32,17 @@ install_and_load_packages(
   auto_install = "y"
 )
 
+# Copy previous data over from data store if on cyverse and project has been run before
+if(cyverse) {
+  if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data")) {
+    system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data ~/lens-aop-continental-scaling/data")
+  }
+  if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/figs")) {
+    system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/figs ~/lens-aop-continental-scaling/figs")
+  }
+}
+
+
 # Set up necessary data directories
 dir_ensure(here::here("data"))
 dir_raw <- here::here("data/raw")
@@ -48,9 +58,10 @@ options(timeout = 1500)
 
 
 #Download and stream data sources
+tic()
 raster <- access_landfire_evt_conus_2022(access = 'download',
                                          dir_path = dir_raw)
-#activeCat(raster) <- 0
+toc()
 
 raster_cats <- access_landfire_evt_conus_2022_csv() |>
   dplyr::mutate(VALUE = as.integer(VALUE))
@@ -114,6 +125,8 @@ conus_lens_analysis <- function(region_polygons_merged,
                                 aoi_drop_perc = NA,
                                 drop_classes = NA,
                                 drop_classes_column_name = NA,
+                                out_rast_values = "PERC_COVER",
+                                out_rast_type = "NOT_REP",
                                 out_dir) {
   
   # Setup output directory for rasters
@@ -133,8 +146,8 @@ conus_lens_analysis <- function(region_polygons_merged,
                                     aoi_drop_perc = aoi_drop_perc,
                                     drop_classes = drop_classes,
                                     drop_classes_column_name = drop_classes_column_name,
-                                    out_rast_values = "PERC_COVER",
-                                    out_rast_type = "NOT_REP", #out_rast_type = "BOTH", "REP", "NOT_REP", or "NONE"
+                                    out_rast_values = out_rast_values,
+                                    out_rast_type = out_rast_type, #out_rast_type = "BOTH", "REP", "NOT_REP", or "NONE"
                                     out_dir = dir_out,
                                     new_sub_dir = FALSE)
   
@@ -216,6 +229,7 @@ conus_lens_analysis <- function(region_polygons_merged,
 
 # Run analysis with AOI threshold of 0.001% - 1% and all EVT classes
 
+tic()
 conus_lens_analysis(region_polygons_merged = region_polygons_merged,
                     areas_of_interest_merged = areas_of_interest_merged,
                     raster = raster,
@@ -225,7 +239,10 @@ conus_lens_analysis(region_polygons_merged = region_polygons_merged,
                     aoi_drop_perc = 0.001,
                     drop_classes = NA,
                     drop_classes_column_name = NA,
+                    out_rast_values = "BOTH",
+                    out_rast_type = "BOTH",
                     out_dir = here::here('data/derived/'))
+toc()
 
 conus_lens_analysis(region_polygons_merged = region_polygons_merged,
                     areas_of_interest_merged = areas_of_interest_merged,
@@ -236,6 +253,8 @@ conus_lens_analysis(region_polygons_merged = region_polygons_merged,
                     aoi_drop_perc = 0.01,
                     drop_classes = NA,
                     drop_classes_column_name = NA,
+                    out_rast_values = "BOTH",
+                    out_rast_type = "BOTH",
                     out_dir = here::here('data/derived/'))
 
 conus_lens_analysis(region_polygons_merged = region_polygons_merged,
@@ -247,6 +266,8 @@ conus_lens_analysis(region_polygons_merged = region_polygons_merged,
                     aoi_drop_perc = 0.1,
                     drop_classes = NA,
                     drop_classes_column_name = NA,
+                    out_rast_values = "BOTH",
+                    out_rast_type = "BOTH",
                     out_dir = here::here('data/derived/'))
 
 tic()
@@ -259,6 +280,8 @@ conus_lens_analysis(region_polygons_merged = region_polygons_merged,
                     aoi_drop_perc = 1,
                     drop_classes = NA,
                     drop_classes_column_name = NA,
+                    out_rast_values = "BOTH",
+                    out_rast_type = "BOTH",
                     out_dir = here::here('data/derived/'))
 toc()
 
@@ -280,6 +303,8 @@ conus_lens_analysis(region_polygons_merged = region_polygons_merged,
                     aoi_drop_perc = 0.001,
                     drop_classes = ag_dev_mine_evt_names,
                     drop_classes_column_name = "EVT_NAME",
+                    out_rast_values = "BOTH",
+                    out_rast_type = "BOTH",
                     out_dir = here::here('data/derived/'))
 
 conus_lens_analysis(region_polygons_merged = region_polygons_merged,
@@ -291,6 +316,8 @@ conus_lens_analysis(region_polygons_merged = region_polygons_merged,
                     aoi_drop_perc = 0.01,
                     drop_classes = ag_dev_mine_evt_names,
                     drop_classes_column_name = "EVT_NAME",
+                    out_rast_values = "BOTH",
+                    out_rast_type = "BOTH",
                     out_dir = here::here('data/derived/'))
 
 conus_lens_analysis(region_polygons_merged = region_polygons_merged,
@@ -302,6 +329,8 @@ conus_lens_analysis(region_polygons_merged = region_polygons_merged,
                     aoi_drop_perc = 0.1,
                     drop_classes = ag_dev_mine_evt_names,
                     drop_classes_column_name = "EVT_NAME",
+                    out_rast_values = "BOTH",
+                    out_rast_type = "BOTH",
                     out_dir = here::here('data/derived/'))
 
 conus_lens_analysis(region_polygons_merged = region_polygons_merged,
@@ -313,6 +342,8 @@ conus_lens_analysis(region_polygons_merged = region_polygons_merged,
                     aoi_drop_perc = 1,
                     drop_classes = ag_dev_mine_evt_names,
                     drop_classes_column_name = "EVT_NAME",
+                    out_rast_values = "BOTH",
+                    out_rast_type = "BOTH",
                     out_dir = here::here('data/derived/'))
 
 
@@ -327,6 +358,8 @@ conus_lens_analysis(region_polygons_merged = region_polygons_merged,
                     aoi_drop_perc = 0.001,
                     drop_classes = NA,
                     drop_classes_column_name = NA,
+                    out_rast_values = "BOTH",
+                    out_rast_type = "BOTH",
                     out_dir = here::here('data/derived/'))
 
 conus_lens_analysis(region_polygons_merged = region_polygons_merged,
@@ -338,6 +371,8 @@ conus_lens_analysis(region_polygons_merged = region_polygons_merged,
                     aoi_drop_perc = 0.01,
                     drop_classes = NA,
                     drop_classes_column_name = NA,
+                    out_rast_values = "BOTH",
+                    out_rast_type = "BOTH",
                     out_dir = here::here('data/derived/'))
 
 conus_lens_analysis(region_polygons_merged = region_polygons_merged,
@@ -349,6 +384,8 @@ conus_lens_analysis(region_polygons_merged = region_polygons_merged,
                     aoi_drop_perc = 0.1,
                     drop_classes = NA,
                     drop_classes_column_name = NA,
+                    out_rast_values = "BOTH",
+                    out_rast_type = "BOTH",
                     out_dir = here::here('data/derived/'))
 
 tic()
@@ -361,6 +398,8 @@ conus_lens_analysis(region_polygons_merged = region_polygons_merged,
                     aoi_drop_perc = 1,
                     drop_classes = NA,
                     drop_classes_column_name = NA,
+                    out_rast_values = "BOTH",
+                    out_rast_type = "BOTH",
                     out_dir = here::here('data/derived/'))
 toc()
 
@@ -380,6 +419,8 @@ conus_lens_analysis(region_polygons_merged = region_polygons_merged,
                     aoi_drop_perc = 0.001,
                     drop_classes = ag_dev_mine_evt_names,
                     drop_classes_column_name = "EVT_NAME",
+                    out_rast_values = "BOTH",
+                    out_rast_type = "BOTH",
                     out_dir = here::here('data/derived/'))
 
 conus_lens_analysis(region_polygons_merged = region_polygons_merged,
@@ -391,6 +432,8 @@ conus_lens_analysis(region_polygons_merged = region_polygons_merged,
                     aoi_drop_perc = 0.01,
                     drop_classes = ag_dev_mine_evt_names,
                     drop_classes_column_name = "EVT_NAME",
+                    out_rast_values = "BOTH",
+                    out_rast_type = "BOTH",
                     out_dir = here::here('data/derived/'))
 
 conus_lens_analysis(region_polygons_merged = region_polygons_merged,
@@ -402,6 +445,8 @@ conus_lens_analysis(region_polygons_merged = region_polygons_merged,
                     aoi_drop_perc = 0.1,
                     drop_classes = ag_dev_mine_evt_names,
                     drop_classes_column_name = "EVT_NAME",
+                    out_rast_values = "BOTH",
+                    out_rast_type = "BOTH",
                     out_dir = here::here('data/derived/'))
 
 conus_lens_analysis(region_polygons_merged = region_polygons_merged,
@@ -413,6 +458,8 @@ conus_lens_analysis(region_polygons_merged = region_polygons_merged,
                     aoi_drop_perc = 1,
                     drop_classes = ag_dev_mine_evt_names,
                     drop_classes_column_name = "EVT_NAME",
+                    out_rast_values = "BOTH",
+                    out_rast_type = "BOTH",
                     out_dir = here::here('data/derived/'))
 
 
@@ -422,6 +469,11 @@ conus_lens_analysis(region_polygons_merged = region_polygons_merged,
 
 
 
+
+if(cyverse) {
+  system("cp -r ~/lens-aop-continental-scaling/data ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling")
+  system("cp -r ~/lens-aop-continental-scaling/figs ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling")
+}
 
 
 
