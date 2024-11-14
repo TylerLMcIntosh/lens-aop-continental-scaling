@@ -31,7 +31,8 @@ install_and_load_packages(
     "tictoc",
     "tigris",
     "tmap",
-    "stars"),
+    "stars",
+    "furrr"),
   auto_install = "y"
 )
 
@@ -65,6 +66,7 @@ options(timeout = 1500)
 tic()
 raster <- access_landfire_evt_conus_2022(access = 'download',
                                          dir_path = dir_raw)
+evt_conus_file <- here::here(dir_raw, "LF2022_EVT_230_CONUS/Tif/LC22_EVT_230.tif")
 toc()
 
 raster_cats <- access_landfire_evt_conus_2022_csv() |>
@@ -122,16 +124,16 @@ areas_of_interest_merged_file <- here::here(dir_derived, "areas_of_interest_merg
 sf::st_write(areas_of_interest_merged, areas_of_interest_merged_file)
 
 #Set up to use EPA ecoregions as well
-epa_region_polygons_merged <- epa_region_polygons |>
-  sf::st_cast("POLYGON") %>% #split out multipolygons
-  dplyr::filter(sf::st_intersects(., conus, sparse = FALSE)) |>
-  # dplyr::group_by(DomainID, DomainName) |>
-  # dplyr::summarise(geometry = sf::st_union(geometry)) |>
-  # dplyr::ungroup() |>
-  # dplyr::arrange(DomainID)
-  
-epa_region_polygons_merged_file <- here::here(dir_derived, "epa_region_polygons_merged.gpkg")
-sf::st_write(epa_region_polygons_merged, epa_region_polygons_merged_file)
+# epa_region_polygons_merged <- epa_region_polygons |>
+#   sf::st_cast("POLYGON") %>% #split out multipolygons
+#   dplyr::filter(sf::st_intersects(., conus, sparse = FALSE)) |>
+#   # dplyr::group_by(DomainID, DomainName) |>
+#   # dplyr::summarise(geometry = sf::st_union(geometry)) |>
+#   # dplyr::ungroup() |>
+#   # dplyr::arrange(DomainID)
+#   
+# epa_region_polygons_merged_file <- here::here(dir_derived, "epa_region_polygons_merged.gpkg")
+# sf::st_write(epa_region_polygons_merged, epa_region_polygons_merged_file)
 
 
 ## Prep to run analyses ----
@@ -144,21 +146,37 @@ ag_dev_mine_evt_names <- raster_cats |> dplyr::filter(
   dplyr::pull(EVT_NAME) |>
   as.vector()
 
-evt_conus_file <- here::here(dir_raw, "LF2022_EVT_230_CONUS/TIF/LC22_EVT_230.tif")
+#For conus analyses
+
+# conus_neon <- neon_region_polygons |>
+#   sf::st_cast("POLYGON") %>% #split out multipolygons
+#   dplyr::filter(sf::st_intersects(., conus, sparse = FALSE)) |>
+#   dplyr::summarise(geometry = sf::st_union(geometry))
+#   
+# conus_aoi <- areas_of_interest_merged |>
+#   dplyr::summarise(geometry = sf::st_union(geometry))
+# 
+# 
+# x <- conus_neon |> 
+#   sf::st_transform(5070) |>
+#   sf::st_buffer(2) |>
+#   sf::st_transform(sf::st_crs(conus_neon))
+# mapview(x)
 
 
 ## NEON domains analyses ----
 
 # Run analysis with AOI threshold of 0.001% - 1% and all EVT classes
+future::plan(multisession, workers = 4)
 tic()
-purrr::walk2(.x = aoi_thresholds,
+furrr::future_map2(.x = aoi_thresholds,
              .y = c("neon_domains_evt_raw_all_0001",
                     "neon_domains_evt_raw_all_001",
                     "neon_domains_evt_raw_all_01",
                     "neon_domains_evt_raw_all_1"),
-             .f = function(x, y) conus_lens_analysis(region_polygons_merged = region_polygons_merged[1,],
-                                                     areas_of_interest_merged = areas_of_interest_merged[1,],
-                                                     raster = raster,
+             .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged_file,
+                                                     areas_of_interest_merged = areas_of_interest_merged_file,
+                                                     raster = evt_conus_file,
                                                      raster_cat_df = raster_cats,
                                                      run_name = y,
                                                      cat_base_column_name = "VALUE",

@@ -24,15 +24,15 @@ conus_lens_analysis <- function(region_polygons_merged,
   
   # Allow ease of parallel processing
   if(is.character(raster)) {
-    terra::rast(raster)
+    raster <- terra::rast(raster)
   }
   
   if(is.character(region_polygons_merged)) {
-    sf::st_read(region_polygons_merged)
+    region_polygons_merged <- sf::st_read(region_polygons_merged)
   }
   
   if(is.character(areas_of_interest_merged)) {
-    sf::st_read(areas_of_interest_merged)
+    areas_of_interest_merged <- sf::st_read(areas_of_interest_merged)
   }
   
   # Setup output directory for rasters
