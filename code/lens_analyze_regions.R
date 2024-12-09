@@ -36,16 +36,16 @@ install_and_load_packages(
   auto_install = "y"
 )
 
-## Cyverse data store access if applicable ----
-# Copy previous data over from data store if on cyverse and project has been run before
-if(cyverse) {
-  if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data")) {
-    system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data ~/lens-aop-continental-scaling/")
-  }
-  if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/figs")) {
-    system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/figs ~/lens-aop-continental-scaling/")
-  }
-}
+# ## Cyverse data store access if applicable ----
+# # Copy previous data over from data store if on cyverse and project has been run before
+# if(cyverse) {
+#   if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data")) {
+#     system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data ~/lens-aop-continental-scaling/")
+#   }
+#   if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/figs")) {
+#     system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/figs ~/lens-aop-continental-scaling/")
+#   }
+# }
 
 
 # Set up necessary data directories
@@ -76,20 +76,21 @@ epa_region_polygons <- access_data_epa_l2_ecoregions_api() |>
   sf::st_transform(sf::st_crs(neon_region_polygons))
 areas_of_interest <- access_neon_aop_flight_box_data() #note that flight boxes have the domain data as "D##" instead of just "##"
 
-
-areas_of_interest <- areas_of_interest |>
-  sf::st_transform(sf::st_crs(neon_region_polygons))
-
-
-# Operate ----
-
-## Prep region & AOI sets ----
-
 # Get CONUS bounds to spatial subset
 conus <- tigris::states() |>
   dplyr::filter(!STUSPS %in% c("AK", "HI", "PR", "VI", "MP", "GU", "AS")) |>
   dplyr::summarise(geometry = sf::st_union(geometry)) |>
   sf::st_transform(sf::st_crs(neon_region_polygons))
+
+areas_of_interest <- areas_of_interest |>
+  sf::st_transform(sf::st_crs(neon_region_polygons)) |>
+  sf::st_make_valid() %>% #force validity, duplicate vertex error
+  dplyr::filter(sf::st_intersects(., conus, sparse = FALSE))
+
+
+# Operate ----
+
+## Prep region & AOI sets ----
 
 # Merge NEON regions and aois for analyses
 neon_region_polygons_merged <- neon_region_polygons |>
@@ -101,8 +102,6 @@ neon_region_polygons_merged <- neon_region_polygons |>
   dplyr::arrange(DomainID)
 
 neon_areas_of_interest_merged <- areas_of_interest |>
-  sf::st_make_valid() %>% #force validity, duplicate vertex error
-  dplyr::filter(sf::st_intersects(., conus, sparse = FALSE)) |>
   dplyr::group_by(domain, domainName) |>
   dplyr::summarise(geometry = sf::st_union(geometry)) |>
   dplyr::ungroup() |>
@@ -135,37 +134,28 @@ epa_region_polygons_merged <- epa_region_polygons |>
   dplyr::ungroup() |>
   dplyr::arrange(NA_L2KEY) |>
   dplyr::filter(NA_L2CODE != "0.0") |>
-  sf::st_intersection(conus) |>
-  
+  sf::st_intersection(conus)
+
 
 epa_areas_of_interest_merged <- areas_of_interest |>
-  sf::st_make_valid() %>% #force validity, duplicate vertex error
-  dplyr::filter(sf::st_intersects(., conus, sparse = FALSE)) |>
-  dplyr::group_by(domain, domainName) |>
+  sf::st_intersection(epa_region_polygons_merged) |>
+  dplyr::group_by(NA_L2CODE, NA_L2KEY) |>
   dplyr::summarise(geometry = sf::st_union(geometry)) |>
   dplyr::ungroup() |>
-  dplyr::rename(DomainName = domainName) |>
-  dplyr::mutate(DomainID = as.integer(substr_right(domain, 2))) |>
-  dplyr::arrange(DomainID)
+  dplyr::arrange(NA_L2KEY)
 
 #Ensure that the same sets are in both
-common_domain_ids <- lubridate::intersect(neon_region_polygons_merged$DomainID, neon_areas_of_interest_merged$DomainID)
-neon_region_polygons_merged <- neon_region_polygons_merged %>%
-  dplyr::filter(DomainID %in% common_domain_ids)
-neon_areas_of_interest_merged <- neon_areas_of_interest_merged %>%
-  dplyr::filter(DomainID %in% common_domain_ids)
+common_epa_ids <- lubridate::intersect(epa_region_polygons_merged$NA_L2KEY, epa_areas_of_interest_merged$NA_L2KEY)
+epa_region_polygons_merged <- epa_region_polygons_merged %>%
+  dplyr::filter(NA_L2KEY %in% common_epa_ids)
+epa_areas_of_interest_merged <- epa_areas_of_interest_merged %>%
+  dplyr::filter(NA_L2KEY %in% common_epa_ids)
 
-neon_region_polygons_merged_file <- here::here(dir_derived, "neon_region_polygons_merged.gpkg")
-sf::st_write(neon_region_polygons_merged, neon_region_polygons_merged_file)
+epa_region_polygons_merged_file <- here::here(dir_derived, "epa_region_polygons_merged.gpkg")
+sf::st_write(epa_region_polygons_merged, epa_region_polygons_merged_file)
 
-neon_areas_of_interest_merged_file <- here::here(dir_derived, "neon_areas_of_interest_merged.gpkg")
-sf::st_write(neon_areas_of_interest_merged, neon_areas_of_interest_merged_file)
-
-
-
-
-# epa_region_polygons_merged_file <- here::here(dir_derived, "epa_region_polygons_merged.gpkg")
-# sf::st_write(epa_region_polygons_merged, epa_region_polygons_merged_file)
+epa_areas_of_interest_merged_file <- here::here(dir_derived, "epa_areas_of_interest_merged.gpkg")
+sf::st_write(epa_areas_of_interest_merged, epa_areas_of_interest_merged_file)
 
 
 ## Prep to run analyses ----
