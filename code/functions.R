@@ -73,10 +73,11 @@ conus_lens_analysis <- function(region_polygons_merged,
 
 conus_lens_figure <- function(dir_search,
                               pattern,
-                              overlay_polygons) {
+                              overlay_polygons,
+                              name) {
   
   # Read in the list of tif files to create the CONUS figure
-  tif_files <- list.files(dir_out,
+  tif_files <- list.files(dir_search,
                           pattern = pattern,
                           full.names = TRUE,
                           recursive = TRUE)
@@ -96,7 +97,7 @@ conus_lens_figure <- function(dir_search,
     
     if(raster_path == tif_files[1]) {
       tm_plot <- 
-        tm_shape(region_polygons_merged |>
+        tm_shape(overlay_polygons |>
                    sf::st_transform(terra::crs(terra::rast(tif_files[1]))),
                  bbox = sf::st_bbox(conus)) +
         tm_borders(col = "gray90", lwd = 1) +
@@ -131,15 +132,15 @@ conus_lens_figure <- function(dir_search,
     tm_borders(col = "gray20",
                lwd = 1) +
     tm_fill(col = NA, alpha = 0) +
-    tm_shape(areas_of_interest_merged) +
+    tm_shape(neon_areas_of_interest_merged) +
     tm_borders(col = "darkblue",
                lwd = 1) +
     tmap::tm_layout(legend.outside = FALSE,
                     legend.position = c("left", "bottom"),
-                    title = paste0("Non-AOP represented land cover areas: ", aoi_drop_perc, "% threshold\n", run_name))
+                    title = name)
   
   # Save the plot
-  tmap::tmap_save(tm_plot, here::here(dir_figs, paste0(run_name, "_", clean_aoi_dp, ".jpeg")))
+  tmap::tmap_save(tm_plot, here::here(dir_figs, paste0(name, ".jpeg")))
   
 }
 
