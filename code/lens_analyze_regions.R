@@ -72,7 +72,7 @@ toc()
 raster_cats <- access_landfire_evt_conus_2022_csv() |>
   dplyr::mutate(VALUE = as.integer(VALUE))
 neon_region_polygons <- access_neon_domains_shp()
-epa_region_polygons <- access_data_epa_l3_ecoregions_vsi() |>
+epa_region_polygons <- access_data_epa_l2_ecoregions_api() |>
   sf::st_transform(sf::st_crs(neon_region_polygons))
 areas_of_interest <- access_neon_aop_flight_box_data() #note that flight boxes have the domain data as "D##" instead of just "##"
 
@@ -100,7 +100,7 @@ neon_region_polygons_merged <- neon_region_polygons |>
   dplyr::ungroup() |>
   dplyr::arrange(DomainID)
 
-areas_of_interest_merged <- areas_of_interest |>
+neon_areas_of_interest_merged <- areas_of_interest |>
   sf::st_make_valid() %>% #force validity, duplicate vertex error
   dplyr::filter(sf::st_intersects(., conus, sparse = FALSE)) |>
   dplyr::group_by(domain, domainName) |>
@@ -111,27 +111,59 @@ areas_of_interest_merged <- areas_of_interest |>
   dplyr::arrange(DomainID)
 
 #Ensure that the same sets are in both
-common_domain_ids <- lubridate::intersect(neon_region_polygons_merged$DomainID, areas_of_interest_merged$DomainID)
+neon_common_domain_ids <- lubridate::intersect(neon_region_polygons_merged$DomainID, neon_areas_of_interest_merged$DomainID)
+neon_region_polygons_merged <- neon_region_polygons_merged %>%
+  dplyr::filter(DomainID %in% neon_common_domain_ids)
+neon_areas_of_interest_merged <- neon_areas_of_interest_merged %>%
+  dplyr::filter(DomainID %in% neon_common_domain_ids)
+
+neon_region_polygons_merged_file <- here::here(dir_derived, "neon_region_polygons_merged.gpkg")
+sf::st_write(neon_region_polygons_merged, neon_region_polygons_merged_file, append = FALSE)
+
+neon_areas_of_interest_merged_file <- here::here(dir_derived, "neon_areas_of_interest_merged.gpkg")
+sf::st_write(neon_areas_of_interest_merged, neon_areas_of_interest_merged_file, append = FALSE)
+
+
+
+#Set up to use EPA ecoregions as well
+epa_region_polygons_merged <- epa_region_polygons |>
+  sf::st_cast("POLYGON") |> #split out multipolygons
+  sf::st_make_valid() %>%
+  dplyr::filter(sf::st_intersects(., conus, sparse = FALSE)) |>
+  dplyr::group_by(NA_L2CODE, NA_L2KEY) |>
+  dplyr::summarise(geometry = sf::st_union(geometry)) |>
+  dplyr::ungroup() |>
+  dplyr::arrange(NA_L2KEY) |>
+  dplyr::filter(NA_L2CODE != "0.0") |>
+  sf::st_intersection(conus) |>
+  
+
+epa_areas_of_interest_merged <- areas_of_interest |>
+  sf::st_make_valid() %>% #force validity, duplicate vertex error
+  dplyr::filter(sf::st_intersects(., conus, sparse = FALSE)) |>
+  dplyr::group_by(domain, domainName) |>
+  dplyr::summarise(geometry = sf::st_union(geometry)) |>
+  dplyr::ungroup() |>
+  dplyr::rename(DomainName = domainName) |>
+  dplyr::mutate(DomainID = as.integer(substr_right(domain, 2))) |>
+  dplyr::arrange(DomainID)
+
+#Ensure that the same sets are in both
+common_domain_ids <- lubridate::intersect(neon_region_polygons_merged$DomainID, neon_areas_of_interest_merged$DomainID)
 neon_region_polygons_merged <- neon_region_polygons_merged %>%
   dplyr::filter(DomainID %in% common_domain_ids)
-areas_of_interest_merged <- areas_of_interest_merged %>%
+neon_areas_of_interest_merged <- neon_areas_of_interest_merged %>%
   dplyr::filter(DomainID %in% common_domain_ids)
 
 neon_region_polygons_merged_file <- here::here(dir_derived, "neon_region_polygons_merged.gpkg")
 sf::st_write(neon_region_polygons_merged, neon_region_polygons_merged_file)
 
-areas_of_interest_merged_file <- here::here(dir_derived, "areas_of_interest_merged.gpkg")
-sf::st_write(areas_of_interest_merged, areas_of_interest_merged_file)
+neon_areas_of_interest_merged_file <- here::here(dir_derived, "neon_areas_of_interest_merged.gpkg")
+sf::st_write(neon_areas_of_interest_merged, neon_areas_of_interest_merged_file)
 
-#Set up to use EPA ecoregions as well
-# epa_region_polygons_merged <- epa_region_polygons |>
-#   sf::st_cast("POLYGON") %>% #split out multipolygons
-#   dplyr::filter(sf::st_intersects(., conus, sparse = FALSE)) |>
-#   # dplyr::group_by(DomainID, DomainName) |>
-#   # dplyr::summarise(geometry = sf::st_union(geometry)) |>
-#   # dplyr::ungroup() |>
-#   # dplyr::arrange(DomainID)
-#   
+
+
+
 # epa_region_polygons_merged_file <- here::here(dir_derived, "epa_region_polygons_merged.gpkg")
 # sf::st_write(epa_region_polygons_merged, epa_region_polygons_merged_file)
 
@@ -175,7 +207,7 @@ furrr::future_map2(.x = aoi_thresholds,
                     "neon_domains_evt_raw_all_01",
                     "neon_domains_evt_raw_all_1"),
              .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged_file,
-                                                     areas_of_interest_merged = areas_of_interest_merged_file,
+                                                     areas_of_interest_merged = neon_areas_of_interest_merged_file,
                                                      raster = evt_conus_file,
                                                      raster_cat_df = raster_cats,
                                                      run_name = y,
@@ -196,8 +228,8 @@ purrr::walk2(.x = aoi_thresholds,
                     "neon_domains_evt_raw_no_ag_dev_mine_001",
                     "neon_domains_evt_raw_no_ag_dev_mine_01",
                     "neon_domains_evt_raw_no_ag_dev_mine_1"),
-             .f = function(x, y) conus_lens_analysis(region_polygons_merged = region_polygons_merged,
-                                                     areas_of_interest_merged = areas_of_interest_merged,
+             .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged,
+                                                     areas_of_interest_merged = neon_areas_of_interest_merged,
                                                      raster = raster,
                                                      raster_cat_df = raster_cats,
                                                      run_name = y,
@@ -218,8 +250,9 @@ purrr::walk2(.x = aoi_thresholds,
                     "neon_domains_evt_groups_all_001",
                     "neon_domains_evt_groups_all_01",
                     "neon_domains_evt_groups_all_1"),
-             .f = function(x, y) conus_lens_analysis(region_polygons_merged = region_polygons_merged[1,],
-                                                     areas_of_interest_merged = areas_of_interest_merged[1,],
+             .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged[1,],
+                                                     areas_of_interest_merged = neon_areas_of_interest_merged[1,],
+                                                     region_name_col = "DomainName",
                                                      raster = raster,
                                                      raster_cat_df = raster_cats,
                                                      run_name = y,
@@ -241,8 +274,8 @@ purrr::walk2(.x = aoi_thresholds,
                     "neon_domains_evt_groups_no_ag_dev_mine_001",
                     "neon_domains_evt_groups_no_ag_dev_mine_01",
                     "neon_domains_evt_groups_no_ag_dev_mine_1"),
-             .f = function(x, y) conus_lens_analysis(region_polygons_merged = region_polygons_merged,
-                                                     areas_of_interest_merged = areas_of_interest_merged,
+             .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged,
+                                                     areas_of_interest_merged = neon_areas_of_interest_merged,
                                                      raster = raster,
                                                      raster_cat_df = raster_cats,
                                                      run_name = y,
@@ -264,8 +297,8 @@ purrr::walk2(.x = aoi_thresholds,
                     "conus_evt_raw_all_001",
                     "conus_evt_raw_all_01",
                     "conus_evt_raw_all_1"),
-             .f = function(x, y) conus_lens_analysis(region_polygons_merged = region_polygons_merged,
-                                                     areas_of_interest_merged = areas_of_interest_merged,
+             .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged,
+                                                     areas_of_interest_merged = neon_areas_of_interest_merged,
                                                      raster = raster,
                                                      raster_cat_df = raster_cats,
                                                      run_name = y,
@@ -284,8 +317,8 @@ purrr::walk2(.x = aoi_thresholds,
                     "conus_evt_groups_all_001",
                     "conus_evt_groups_all_01",
                     "conus_evt_groups_all_1"),
-             .f = function(x, y) conus_lens_analysis(region_polygons_merged = region_polygons_merged,
-                                                     areas_of_interest_merged = areas_of_interest_merged,
+             .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged,
+                                                     areas_of_interest_merged = neon_areas_of_interest_merged,
                                                      raster = raster,
                                                      raster_cat_df = raster_cats,
                                                      run_name = y,

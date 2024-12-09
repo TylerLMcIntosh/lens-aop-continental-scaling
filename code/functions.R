@@ -8,6 +8,7 @@
 # A specific version of representative_categorical_cover_analysis that operates over a full set of matched
 # region and AOI polygons, exports results, creates a csv summary, and a single CONUS-wide graphic
 conus_lens_analysis <- function(region_polygons_merged,
+                                region_name_col,
                                 areas_of_interest_merged,
                                 raster,
                                 raster_cat_df,
@@ -43,7 +44,8 @@ conus_lens_analysis <- function(region_polygons_merged,
   #Run analysis using representative_categorical_cover_analysis function
   all_region_results <- purrr::pmap(list(region_shape = split(region_polygons_merged, seq(nrow(region_polygons_merged))),
                                          aoi_shape = split(areas_of_interest_merged, seq(nrow(areas_of_interest_merged))),
-                                         run_name = paste(run_name, region_polygons_merged$DomainName, sep ="_")),
+                                    #     run_name = paste(run_name, region_polygons_merged$DomainName, sep ="_")),
+                                          run_name = paste(run_name, region_polygons_merged[[region_name_col]], sep = "_")),
                                     representative_categorical_cover_analysis,
                                     raster = raster,
                                     raster_cat_df = raster_cat_df,
@@ -70,7 +72,8 @@ conus_lens_analysis <- function(region_polygons_merged,
 
 
 conus_lens_figure <- function(dir_search,
-                              pattern) {
+                              pattern,
+                              overlay_polygons) {
   
   # Read in the list of tif files to create the CONUS figure
   tif_files <- list.files(dir_out,
@@ -124,7 +127,7 @@ conus_lens_figure <- function(dir_search,
   
   # Finalize the plot layout with the legend outside
   tm_plot <- tm_plot +
-    tm_shape(region_polygons_merged) +
+    tm_shape(overlay_polygons) +
     tm_borders(col = "gray20",
                lwd = 1) +
     tm_fill(col = NA, alpha = 0) +
@@ -242,7 +245,8 @@ representative_categorical_cover_analysis <- function(raster,
   #Setup output directories
   clean_run_name <- run_name %>%
     gsub(" ", "", .) %>%
-    gsub("/", "_", .)
+    gsub("/", "_", .) %>%
+    gsub(".", "_", .)
   clean_aoi_dp <- gsub("\\.", "", as.character(aoi_drop_perc))
   clean_region_dp <- gsub("\\.", "", as.character(region_drop_perc))
   clean_run_name <- paste(clean_run_name, "_adp", clean_aoi_dp, "_rdp", clean_region_dp, sep = "")
@@ -1739,6 +1743,21 @@ access_data_epa_l3_ecoregions_vsi <- function() {
     sf::st_read()
   
   return(epa_l3)
+}
+
+
+
+access_data_epa_l2_ecoregions_api <- function() {
+  url <- "https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/Ecological_Regions_of_North_America_Level_2/FeatureServer/0/QUERY"
+  query_params <- list(where = "1=1",
+                       outFields = "*",
+                       f = "json")
+  epa_l2 <- access_data_get_x_from_arcgis_rest_api_geojson(url,
+                                                 query_params,
+                                                 max_record = 2000,
+                                                 n = "all",
+                                                 timeout = 500)
+  return(epa_l2)
 }
 
 
