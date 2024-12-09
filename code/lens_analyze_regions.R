@@ -152,10 +152,10 @@ epa_areas_of_interest_merged <- epa_areas_of_interest_merged %>%
   dplyr::filter(NA_L2KEY %in% common_epa_ids)
 
 epa_region_polygons_merged_file <- here::here(dir_derived, "epa_region_polygons_merged.gpkg")
-sf::st_write(epa_region_polygons_merged, epa_region_polygons_merged_file)
+sf::st_write(epa_region_polygons_merged, epa_region_polygons_merged_file, append = FALSE)
 
 epa_areas_of_interest_merged_file <- here::here(dir_derived, "epa_areas_of_interest_merged.gpkg")
-sf::st_write(epa_areas_of_interest_merged, epa_areas_of_interest_merged_file)
+sf::st_write(epa_areas_of_interest_merged, epa_areas_of_interest_merged_file, append = FALSE)
 
 
 ## Prep to run analyses ----
@@ -242,7 +242,7 @@ purrr::walk2(.x = aoi_thresholds,
                     "neon_domains_evt_groups_all_1"),
              .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged[1,],
                                                      areas_of_interest_merged = neon_areas_of_interest_merged[1,],
-                                                     region_name_col = "DomainName",
+                                                    # region_name_col = "DomainName",
                                                      raster = raster,
                                                      raster_cat_df = raster_cats,
                                                      run_name = y,

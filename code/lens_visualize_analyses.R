@@ -43,6 +43,30 @@ if(cyverse) {
   dir_root <- here::here()
 }
 
+# ## Cyverse data store access if applicable ----
+# # Copy previous data over from data store if on cyverse and project has been run before
+# if(cyverse) {
+#   if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data")) {
+#     system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data ~/lens-aop-continental-scaling/")
+#   }
+#   if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/figs")) {
+#     system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/figs ~/lens-aop-continental-scaling/")
+#   }
+# }
+
+cp source_dir/* destination_dir/
+  
+tic()
+  # Copy previous data over from data store if on cyverse and project has been run before
+  if(cyverse) {
+    if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data")) {
+      system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data ~/lens-aop-continental-scaling/")
+    }
+    if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/figs")) {
+      system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/figs ~/lens-aop-continental-scaling/")
+    }
+  }
+  toc()
 
 # Set up necessary data directories
 dir_derived <- file.path(dir_root, "data", "derived")
