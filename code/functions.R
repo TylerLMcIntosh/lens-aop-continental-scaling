@@ -297,8 +297,6 @@ representative_categorical_cover_analysis <- function(raster,
       dplyr::filter(aoi_perc > aoi_drop_perc)
     df_not_represented <- landcover_analysis_output_included |>
       dplyr::filter(aoi_perc <= aoi_drop_perc)
-  } else {
-    
   }
   
   # OLD VERSION
