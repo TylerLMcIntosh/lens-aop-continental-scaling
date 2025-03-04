@@ -751,6 +751,134 @@ keep_tif_values_in_df <- function(raster, df) {
   return(new_raster)
 }
 
+
+# Bivariate raster mapping ----
+
+
+#' Convert Hexadecimal Color to RGB
+#'
+#' This function converts a 6-character hexadecimal color code into its
+#' corresponding RGB values.
+#'
+#' @param hex A string representing a 6-character hex color code prefixed with `#`
+#'   (e.g., `"#FF5733"`).
+#'
+#' @return A named numeric vector with RGB values (`R`, `G`, `B`).
+#'
+#' @examples
+#' hex_to_rgb("#FF5733")
+#' hex_to_rgb("#00AABB")
+#'
+#' @export
+hex_to_rgb <- function(hex) {
+  # Ensure the input is a valid hex code with a leading "#"
+  if (!grepl("^#([A-Fa-f0-9]{6})$", hex)) {
+    stop("Invalid hex color format. Use a 6-character hex code, e.g., '#FF5733'.")
+  }
+  
+  # Extract RGB components
+  r <- strtoi(substr(hex, 2, 3), base = 16)
+  g <- strtoi(substr(hex, 4, 5), base = 16)
+  b <- strtoi(substr(hex, 6, 7), base = 16)
+  
+  # Check for NA values
+  if (any(is.na(c(r, g, b)))) stop("Failed to convert hex to RGB.")
+  
+  return(c(R = r, G = g, B = b))
+}
+
+#' Create a Bivariate Palette Using a Color Vector
+#'
+#' Generates a biscale-compatible palette from a set of nine hex color codes.
+#'
+#' @param p_vec A character vector of exactly 9 hex color codes.
+#' @param flip A logical value. If `TRUE`, the palette is reversed.
+#'
+#' @return A list containing:
+#'   - `biscale_pal`: A named character vector of hex colors mapped to bivariate classes.
+#'   - `rgb_df`: A data frame with class identifiers and corresponding RGB values.
+#'
+#' @details The function creates a bivariate color palette compatible with biscale mapping.
+#'   The `pals` package provides various palettes that can be used to define `p_vec`.
+#'   See available palettes here: \url{https://cran.r-project.org/web/packages/pals/vignettes/pals_examples.html}.
+#'
+#' @examples
+#' p_vec <- c("#f7fbff", "#deebf7", "#c6dbef", "#9ecae1", "#6baed6", "#4292c6", "#2171b5", "#08519c", "#08306b")
+#' pals_bi_3(p_vec)
+#' pals_bi_3(p_vec, flip = TRUE)
+#'
+#' @export
+pals_bi_3 <- function(p_vec, flip = FALSE) {
+  if (length(p_vec) != 9) {
+    stop("p_vec must contain exactly 9 hex color codes.")
+  }
+  
+  if (flip) {
+    p_vec <- rev(p_vec)
+  }
+  
+  # Create biscale-compatible palette
+  biscale_pal <- setNames(p_vec, c("1-1", "2-1", "3-1", "1-2", "2-2", "3-2", "1-3", "2-3", "3-3"))
+  
+  # Create dataframe
+  class <- c(11, 12, 13, 21, 22, 23, 31, 32, 33)
+  rgb_list <- lapply(p_vec, hex_to_rgb)
+  rgb_df <- data.frame(class, do.call(rbind, rgb_list), stringsAsFactors = FALSE)
+  
+  return(list(biscale_pal = biscale_pal, rgb_df = rgb_df))
+}
+
+#' Normalize Values to a [0,1] Scale
+#'
+#' This function rescales numeric values to a 0-to-1 range.
+#'
+#' @param x A numeric vector or raster object to be normalized.
+#'
+#' @return A numeric vector or raster with values normalized between 0 and 1.
+#'
+#' @examples
+#' normalize(c(10, 20, 30, 40))
+#' normalize(c(5, 15, NA, 25, 35))
+#'
+#' @export
+normalize <- function(x) (x - min(x[], na.rm = TRUE)) / (max(x[], na.rm = TRUE) - min(x[], na.rm = TRUE))
+
+#' Normalize Raster Data Using Global Min-Max Scaling
+#'
+#' This function normalizes raster values from two datasets using a common
+#' global minimum and maximum.
+#'
+#' @param x A `SpatRaster` object from the `terra` package.
+#' @param y A second `SpatRaster` object to be used for determining the global range.
+#'
+#' @return A `SpatRaster` object where `x` has been normalized using the min/max
+#'   values from both `x` and `y`.
+#'
+#' @details This function is useful when normalizing raster datasets that should
+#'   be compared on the same scale. It ensures that both rasters share the same
+#'   min-max normalization bounds.
+#'
+#' @examples
+#' # Example assumes `x` and `y` are SpatRaster objects
+#' \dontrun{
+#' library(terra)
+#' r1 <- rast(matrix(runif(100, 10, 50), 10, 10))
+#' r2 <- rast(matrix(runif(100, 20, 60), 10, 10))
+#' normalized_raster <- bi_dimensional_normalize_raster(r1, r2)
+#' }
+#'
+#' @export
+bi_dimensional_normalize_raster <- function(x, y) {
+  global_min <- min(terra::minmax(x)[1], terra::minmax(y)[1])
+  global_max <- max(terra::minmax(x)[2], terra::minmax(y)[2])
+  
+  x_norm <- (x - global_min) / (global_max - global_min)
+  return(x_norm)                                          
+}
+
+
+
+
 # Generating plots ----
 
 
