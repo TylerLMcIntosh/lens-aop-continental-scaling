@@ -7,7 +7,7 @@ rm(list = ls())
 
 ### ### ### ### ### ### ##
 ### SET PARAMETER HERE ###
-cyverse <- TRUE #Set to TRUE for cyverse processing or FALSE for local processing
+cyverse <- FALSE #Set to TRUE for cyverse processing or FALSE for local processing
 ### ### ### ### ### ### ##
 
 options(scipen = 999)
@@ -32,7 +32,7 @@ install_and_load_packages(
     "tigris",
     "tmap",
     "stars",
-    "furrr"),
+    "scico"),
   auto_install = "y"
 )
 
@@ -60,6 +60,7 @@ if(cyverse) {
 dir_derived <- file.path(dir_root, "data", "derived")
 dir_figs <- here::here("figs")
 dir_ensure(dir_figs)
+dir_ensure(dir_derived)
 
 
 
@@ -144,8 +145,8 @@ epa_areas_of_interest_merged <- epa_areas_of_interest_merged %>%
 
 conus_lens_figure(dir_search = file.path(dir_derived, "neon_domains_evt_raw_all_01_01"),
                   pattern = "not_rep_perc",
-                  overlay_polygons = neon_areas_of_interest_merged,
-                  name = "neon_all_1perc")
+                  overlay_polygons = neon_region_polygons_merged,
+                  name = "neon_all_01perc")
 
 
 tif_files <- list.files(file.path(dir_derived, "neon_domains_evt_raw_all_01_01"),

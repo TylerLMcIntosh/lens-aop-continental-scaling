@@ -44,8 +44,8 @@ conus_lens_analysis <- function(region_polygons_merged,
   #Run analysis using representative_categorical_cover_analysis function
   all_region_results <- purrr::pmap(list(region_shape = split(region_polygons_merged, seq(nrow(region_polygons_merged))),
                                          aoi_shape = split(areas_of_interest_merged, seq(nrow(areas_of_interest_merged))),
-                                         run_name = paste(run_name, region_polygons_merged$DomainName, sep ="_")),
-                                    #      run_name = paste(run_name, region_polygons_merged[[region_name_col]], sep = "_")),
+                                         #run_name = paste(run_name, region_polygons_merged$DomainName, sep ="_")),
+                                        run_name = paste(run_name, region_polygons_merged[[region_name_col]], sep = "_")),
                                     representative_categorical_cover_analysis,
                                     raster = raster,
                                     raster_cat_df = raster_cat_df,
@@ -74,13 +74,16 @@ conus_lens_analysis <- function(region_polygons_merged,
 conus_lens_figure <- function(dir_search,
                               pattern,
                               overlay_polygons,
-                              name) {
+                              name,
+                              col_grad = scico::scico("grayC"),
+                              downsample = TRUE) {
   
   # Read in the list of tif files to create the CONUS figure
   tif_files <- list.files(dir_search,
                           pattern = pattern,
                           full.names = TRUE,
-                          recursive = TRUE)
+                          recursive = TRUE,
+                          breaks = c(0,15))
   
   # CREATE FIGURE AND SAVE
   tmap_options(max.raster = c(plot = 1e7, view = 1e5))
@@ -104,10 +107,10 @@ conus_lens_figure <- function(dir_search,
         tm_fill(col = "gray90") +
         tmap::tm_shape(r,
                        bbox = sf::st_bbox(conus),
-                       downsample = TRUE) +
-        tmap::tm_raster(palette = "YlOrRd",
+                       downsample = downsample) +
+        tmap::tm_raster(palette = col_grad,
                         style = "cont",
-                        breaks = c(0, 15),
+                        breaks = breaks,
                         legend.show = TRUE,
                         title = "Unrepresented landscape\npercentage by class",
                         legend.reverse = FALSE,
@@ -118,10 +121,10 @@ conus_lens_figure <- function(dir_search,
       tm_plot <- tm_plot +
         tmap::tm_shape(r,
                        bbox = sf::st_bbox(conus),
-                       downsample = TRUE) +
-        tmap::tm_raster(palette = "YlOrRd",
+                       downsample = downsample) +
+        tmap::tm_raster(palette = col_grad,
                         style = "cont",
-                        breaks = c(0, 15),
+                        breaks = breaks,
                         legend.show = FALSE)
     }
   }
@@ -247,7 +250,7 @@ representative_categorical_cover_analysis <- function(raster,
   clean_run_name <- run_name %>%
     gsub(" ", "", .) %>%
     gsub("/", "_", .) %>%
-    gsub(".", "_", .)
+    gsub("\\.", "_", .)
   clean_aoi_dp <- gsub("\\.", "", as.character(aoi_drop_perc))
   clean_region_dp <- gsub("\\.", "", as.character(region_drop_perc))
   clean_run_name <- paste(clean_run_name, "_adp", clean_aoi_dp, "_rdp", clean_region_dp, sep = "")
@@ -294,6 +297,8 @@ representative_categorical_cover_analysis <- function(raster,
       dplyr::filter(aoi_perc > aoi_drop_perc)
     df_not_represented <- landcover_analysis_output_included |>
       dplyr::filter(aoi_perc <= aoi_drop_perc)
+  } else {
+    
   }
   
   # OLD VERSION
@@ -407,7 +412,12 @@ representative_categorical_cover_analysis <- function(raster,
 #aoiCover - land cover raster for the smaller region of interest
 #regionCover - land cover raster for a region
 # group: whether to group the data or not (TRUE, FALSE) - note that if grouped, all other columns from cats will be dropped, and the output will no longer have the associated raster values
-analyze_categorical_cover <- function(aoi_raster, larger_region_raster, raster_cat_df, cat_base_column_name, group = FALSE, cat_group_column_name = NA) {
+analyze_categorical_cover <- function(aoi_raster,
+                                      larger_region_raster,
+                                      raster_cat_df,
+                                      cat_base_column_name,
+                                      group = FALSE,
+                                      cat_group_column_name = NA) {
   
   # THIS IS NEW #
   #Ensure that raster categories and active category are set correctly

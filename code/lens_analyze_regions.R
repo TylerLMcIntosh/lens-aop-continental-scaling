@@ -88,6 +88,14 @@ areas_of_interest <- areas_of_interest |>
   dplyr::filter(sf::st_intersects(., conus, sparse = FALSE))
 
 
+# MANUALLY CREATE TEST POLYGONS IF DESIRED
+# install_and_load_packages(c("mapedit"))
+# 
+# test <- mapedit::drawFeatures()
+# test <- test |>
+#   sf::st_transform(sf::st_crs(neon_region_polygons))
+
+
 # Operate ----
 
 ## Prep region & AOI sets ----
@@ -136,7 +144,6 @@ epa_region_polygons_merged <- epa_region_polygons |>
   dplyr::filter(NA_L2CODE != "0.0") |>
   sf::st_intersection(conus)
 
-
 epa_areas_of_interest_merged <- areas_of_interest |>
   sf::st_intersection(epa_region_polygons_merged) |>
   dplyr::group_by(NA_L2CODE, NA_L2KEY) |>
@@ -170,20 +177,20 @@ ag_dev_mine_evt_names <- raster_cats |> dplyr::filter(
 
 #For conus analyses
 
-# conus_neon <- neon_region_polygons |>
-#   sf::st_cast("POLYGON") %>% #split out multipolygons
-#   dplyr::filter(sf::st_intersects(., conus, sparse = FALSE)) |>
-#   dplyr::summarise(geometry = sf::st_union(geometry))
-#   
-# conus_aoi <- areas_of_interest_merged |>
-#   dplyr::summarise(geometry = sf::st_union(geometry))
-# 
-# 
-# x <- conus_neon |> 
-#   sf::st_transform(5070) |>
-#   sf::st_buffer(2) |>
-#   sf::st_transform(sf::st_crs(conus_neon))
-# mapview(x)
+conus_epa <- epa_region_polygons |>
+  sf::st_cast("POLYGON") |> #split out multipolygons
+  dplyr::filter(NA_L2CODE != "0.0") |>
+  sf::st_make_valid() %>%
+  dplyr::filter(sf::st_intersects(., conus, sparse = FALSE)) |>
+  dplyr::summarise(geometry = sf::st_union(geometry)) |>
+  sf::st_intersection(conus)
+
+conus_epa_clean <- conus_epa |> 
+  sf::st_transform(5070) |>
+  sf::st_buffer(2) |> # clean up a few gaps in the polygon
+  sf::st_transform(sf::st_crs(conus_epa)) |>
+  dplyr::mutate(Region = "CONUS")
+mapview(conus_epa_clean)
 
 
 ## NEON domains analyses ----
@@ -198,6 +205,7 @@ furrr::future_map2(.x = aoi_thresholds,
                     "neon_domains_evt_raw_all_1"),
              .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged_file,
                                                      areas_of_interest_merged = neon_areas_of_interest_merged_file,
+                                                     region_name_col = "DomainName",
                                                      raster = evt_conus_file,
                                                      raster_cat_df = raster_cats,
                                                      run_name = y,
@@ -220,6 +228,7 @@ purrr::walk2(.x = aoi_thresholds,
                     "neon_domains_evt_raw_no_ag_dev_mine_1"),
              .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged,
                                                      areas_of_interest_merged = neon_areas_of_interest_merged,
+                                                     region_name_col = "DomainName",
                                                      raster = raster,
                                                      raster_cat_df = raster_cats,
                                                      run_name = y,
@@ -242,7 +251,7 @@ purrr::walk2(.x = aoi_thresholds,
                     "neon_domains_evt_groups_all_1"),
              .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged[1,],
                                                      areas_of_interest_merged = neon_areas_of_interest_merged[1,],
-                                                    # region_name_col = "DomainName",
+                                                     region_name_col = "DomainName",
                                                      raster = raster,
                                                      raster_cat_df = raster_cats,
                                                      run_name = y,
@@ -250,8 +259,8 @@ purrr::walk2(.x = aoi_thresholds,
                                                      aoi_drop_perc = x,
                                                      drop_classes = NA,
                                                      drop_classes_column_name = NA,
-                                                     out_rast_values = "BOTH",
-                                                     out_rast_type = "BOTH",
+                                                     out_rast_values = "PERC_COVER",
+                                                     out_rast_type = "NOT_REP",
                                                      out_dir = here::here('data/derived/')))
 toc()
 
@@ -266,6 +275,7 @@ purrr::walk2(.x = aoi_thresholds,
                     "neon_domains_evt_groups_no_ag_dev_mine_1"),
              .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged,
                                                      areas_of_interest_merged = neon_areas_of_interest_merged,
+                                                     region_name_col = "DomainName",
                                                      raster = raster,
                                                      raster_cat_df = raster_cats,
                                                      run_name = y,
@@ -289,6 +299,7 @@ purrr::walk2(.x = aoi_thresholds,
                     "conus_evt_raw_all_1"),
              .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged,
                                                      areas_of_interest_merged = neon_areas_of_interest_merged,
+                                                     region_name_col = "DomainName",
                                                      raster = raster,
                                                      raster_cat_df = raster_cats,
                                                      run_name = y,
@@ -334,6 +345,53 @@ if(cyverse) {
   system("cp -r ~/lens-aop-continental-scaling/figs ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling")
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# TESTING
+t <- representative_categorical_cover_analysis(raster = raster,
+                                               raster_cat_df = raster_cats,
+                                               region_shape = test,
+                                               aoi_shape = areas_of_interest |> dplyr::filter(siteID == "NIWO"),
+                                               run_name = "Test_mini",
+                                               cat_base_column_name = "VALUE",
+                                               out_rast_values = "BOTH",
+                                               out_rast_type = "BOTH",
+                                               out_dir = here::here("data/derived"),
+                                               new_sub_dir = TRUE)
+
+representative_categorical_cover_analysis <- function(raster,
+                                                      raster_cat_df,
+                                                      region_shape,
+                                                      aoi_shape,
+                                                      run_name = "NotProvided",
+                                                      cat_base_column_name, 
+                                                      aoi_drop_perc = NA,
+                                                      region_drop_perc = NA,
+                                                      drop_classes = NA,
+                                                      drop_classes_column_name = NA,
+                                                      out_rast_values = "BOTH",
+                                                      out_rast_type = "BOTH",
+                                                      out_dir = "",
+                                                      new_sub_dir = FALSE)
 
 
 
