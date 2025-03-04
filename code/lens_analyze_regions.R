@@ -370,10 +370,45 @@ if(cyverse) {
 
 
 
-
-
-
-
+#' Perform Representative Categorical Cover Analysis
+#'
+#' This function analyzes the categorical cover representation within a region and area of interest (AOI).
+#' It computes the percentage of each class within the AOI and the larger region, then determines which 
+#' classes are well represented or underrepresented based on a given threshold.
+#'
+#' @param raster A `SpatRaster` object containing categorical cover data.
+#' @param raster_cat_df A `data.frame` mapping raster values to their respective categories.
+#' @param region_shape A `sf` object representing the broader region of analysis.
+#' @param aoi_shape A `sf` object representing the area of interest (AOI) to analyze.
+#' @param run_name A `character` string specifying the name of the analysis run, which is used to name outputs and output directories.
+#' @param cat_base_column_name A `character` string indicating the column in `raster_cat_df` that contains the categorical data values.
+#' @param aoi_drop_perc A `numeric` value specifying the minimum percentage of a cover class within the AOI to be considered "represented." Defaults to `NA` (no threshold applied).
+#' @param region_drop_perc A `numeric` value specifying the minimum percentage of a cover class within the larger region for inclusion. Defaults to `NA` (no filtering applied).
+#' @param drop_classes A `vector` of category values to exclude from analysis. Defaults to `NA` (no classes dropped).
+#' @param drop_classes_column_name A `character` string specifying the column in `raster_cat_df` used to filter `drop_classes`. Defaults to `NA`.
+#' @param out_rast_values A `character` or `vector` of raster output types. Options:
+#'   - `"RAW"`: Outputs the raw clipped categorical raster.
+#'   - `"PERC_COVER_AOI"`: Outputs a raster where each pixel represents the percentage of the given class within the AOI.
+#'   - `"PERC_COVER_REGION"`: Outputs a raster where each pixel represents the percentage of the given class within the region.
+#' @param out_rast_type A `character` or `vector` specifying which raster types to output. Options:
+#'   - `"REP"`: Raster of represented classes.
+#'   - `"NOT_REP"`: Raster of underrepresented classes.
+#'   - `"FULL"`: Raster including all classes, with no thresholding.
+#'   - `"NONE"`: No raster output.
+#' @param out_dir A `character` string specifying the directory where rasters should be saved.
+#' @param new_sub_dir A `logical` value. If `TRUE`, creates a new subdirectory for output based on `run_name`. Defaults to `FALSE`.
+#' @param perc_digits An `integer` specifying the number of decimal places for percentage values in raster outputs. If `NA`, values remain unrounded.
+#' @param rasters_in_memory A `logical` value. If `TRUE`, returns raster outputs in memory; if `FALSE`, writes them to disk.
+#'
+#' @return A named `list` containing:
+#'   - `df_raw`: The full categorical cover analysis results.
+#'   - `df_included`: The filtered categorical cover analysis results.
+#'   - `df_represented`: The subset of represented classes.
+#'   - `df_not_represented`: The subset of underrepresented classes.
+#'   - `perc_area_not_represented`: The total percentage of the region covered by underrepresented classes.
+#'   - `rasters`: If `rasters_in_memory = TRUE`, a list of raster outputs.
+#'
+#' @export
 representative_categorical_cover_analysis <- function(raster,
                                                       raster_cat_df,
                                                       region_shape,
@@ -384,137 +419,140 @@ representative_categorical_cover_analysis <- function(raster,
                                                       region_drop_perc = NA,
                                                       drop_classes = NA,
                                                       drop_classes_column_name = NA,
-                                                      out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION", "RAW"),
-                                                      out_rast_type = c("REP", "NOT_REP", "FULL"),
-                                                      perc_digits = NA,
-                                                      rasters_in_memory = FALSE,
+                                                      out_rast_values = c("RAW", "PERC_COVER_AOI", "PERC_COVER_REGION"),
+                                                      out_rast_type = c("REP", "NOT_REP"),
                                                       out_dir = "",
-                                                      new_sub_dir = FALSE) {
+                                                      new_sub_dir = FALSE,
+                                                      perc_digits = NA,
+                                                      rasters_in_memory = FALSE) {
   
   print(paste0("Operating on run: ", run_name))
   
-  # Validate inputs
-  valid_rast_values <- c("PERC_COVER_AOI", "PERC_COVER_REGION", "RAW")
+  # Validate input parameters
+  valid_rast_values <- c("RAW", "PERC_COVER_AOI", "PERC_COVER_REGION")
   valid_rast_types <- c("REP", "NOT_REP", "FULL", "NONE")
   
   if (!all(out_rast_values %in% valid_rast_values)) {
-    stop("Invalid value(s) for 'out_rast_values'. Must be one or more of: 'PERC_COVER_AOI', 'PERC_COVER_REGION', 'RAW'.")
+    stop("Invalid out_rast_values. Must be one or more of: 'RAW', 'PERC_COVER_AOI', 'PERC_COVER_REGION'.")
   }
   
   if (!all(out_rast_type %in% valid_rast_types)) {
-    stop("Invalid value(s) for 'out_rast_type'. Must be one or more of: 'REP', 'NOT_REP', 'FULL', 'NONE'.")
+    stop("Invalid out_rast_type. Must be one or more of: 'REP', 'NOT_REP', 'FULL', 'NONE'.")
   }
   
-  if (!is.na(perc_digits) && (!is.numeric(perc_digits) || perc_digits < 0 || perc_digits %% 1 != 0)) {
-    stop("Parameter 'perc_digits' must be a non-negative integer or NA.")
+  if (!cat_base_column_name %in% names(raster_cat_df)) {
+    stop("cat_base_column_name must be a column in raster_cat_df")
   }
   
-  if (!is.logical(rasters_in_memory)) {
-    stop("Parameter 'rasters_in_memory' must be TRUE or FALSE.")
+  print(paste0("Operating on run: ", run_name))
+  
+  # Validate input parameters
+  valid_rast_values <- c("RAW", "PERC_COVER_AOI", "PERC_COVER_REGION")
+  valid_rast_types <- c("REP", "NOT_REP", "FULL", "NONE")
+  
+  if (!all(out_rast_values %in% valid_rast_values)) {
+    stop("Invalid out_rast_values. Must be one or more of: 'RAW', 'PERC_COVER_AOI', 'PERC_COVER_REGION'.")
   }
   
-  if(run_name == "NotProvided") {
-    warning("You have not provided a run_name; 'NotProvided' will be used")
+  if (!all(out_rast_type %in% valid_rast_types)) {
+    stop("Invalid out_rast_type. Must be one or more of: 'REP', 'NOT_REP', 'FULL', 'NONE'.")
   }
   
-  if(!cat_base_column_name %in% names(raster_cat_df)) {
-    stop("cat_base_column_name must be one of the column names in raster_cat_df")
+  if (!cat_base_column_name %in% names(raster_cat_df)) {
+    stop("cat_base_column_name must be a column in raster_cat_df")
   }
   
-  # Setup output directories
-  clean_run_name <- gsub("[ /]", "_", run_name)
+  # Set up output directory
+  clean_run_name <- gsub(" ", "", run_name)
   clean_aoi_dp <- gsub("\\.", "", as.character(aoi_drop_perc))
   clean_region_dp <- gsub("\\.", "", as.character(region_drop_perc))
   clean_run_name <- paste(clean_run_name, "_adp", clean_aoi_dp, "_rdp", clean_region_dp, sep = "")
   
-  if(new_sub_dir) {
+  if (new_sub_dir) {
     out_dir <- here::here(out_dir, clean_run_name)
     dir_ensure(out_dir)
   }
   
-  # Crop sub-regions for analysis
-  print('Cropping to region')
-  larger_region_cover <- crop_careful_universal(raster = raster, vector = region_shape, mask = TRUE, verbose = FALSE) 
-  print('Cropping to AOI')
-  aoi_cover <- crop_careful_universal(raster = larger_region_cover, vector = aoi_shape, mask = TRUE, verbose = FALSE)
+  # Crop to region and AOI
+  print("Cropping to region")
+  larger_region_cover <- crop_careful_universal(raster, region_shape, mask = TRUE)
+  print("Cropping to AOI")
+  aoi_cover <- crop_careful_universal(larger_region_cover, aoi_shape, mask = TRUE)
   
-  # Analyze land cover
-  landcover_analysis_output_raw <- analyze_categorical_cover(
-    aoi_raster = aoi_cover,
-    larger_region_raster = larger_region_cover,
-    raster_cat_df = raster_cat_df,
-    cat_base_column = cat_base_column_name
-  )
+  # Perform categorical cover analysis
+  landcover_analysis_output_raw <- analyze_categorical_cover(aoi_cover, larger_region_cover, raster_cat_df, cat_base_column_name)
+  
+  # Process drop classes and thresholding
   landcover_analysis_output_included <- landcover_analysis_output_raw
-  
-  # Apply regional drop percentage filter
-  if(!is.na(region_drop_perc)) {
-    landcover_analysis_output_included <- landcover_analysis_output_included |>
-      dplyr::filter(region_perc > region_drop_perc)
+  if (!is.na(region_drop_perc)) {
+    landcover_analysis_output_included <- landcover_analysis_output_included |> dplyr::filter(region_perc > region_drop_perc)
   }
-  
-  # Remove specified classes
-  if (!is.na(drop_classes) && length(drop_classes) > 0) {
-    landcover_analysis_output_included <- landcover_analysis_output_included |>
+  if (length(drop_classes) > 0 && !all(is.na(drop_classes))) {
+    landcover_analysis_output_included <- landcover_analysis_output_included |> 
       dplyr::filter(!(.data[[drop_classes_column_name]] %in% drop_classes))
   }
   
-  # Identify represented vs. not represented classes
-  df_represented <- landcover_analysis_output_included
-  df_not_represented <- dplyr::slice(landcover_analysis_output_included, 0)  # Empty df by default
+  # Split into represented and not represented classes
+  df_represented <- landcover_analysis_output_included |> dplyr::filter(aoi_perc > aoi_drop_perc)
+  df_not_represented <- landcover_analysis_output_included |> dplyr::filter(aoi_perc <= aoi_drop_perc)
   
-  if(!is.na(aoi_drop_perc)) {
-    df_represented <- landcover_analysis_output_included |>
-      dplyr::filter(aoi_perc > aoi_drop_perc)
-    df_not_represented <- landcover_analysis_output_included |>
-      dplyr::filter(aoi_perc <= aoi_drop_perc)
-  }
+  # Compute percent not represented
+  perc_area_not_represented <- (sum(df_not_represented$region_count) / sum(landcover_analysis_output_included$region_count)) * 100
   
-  # Calculate percentage of landscape that is not represented
-  not_rep_count <- sum(df_not_represented$region_count, na.rm = TRUE)
-  all_count <- sum(landcover_analysis_output_included$region_count, na.rm = TRUE)
-  perc_area_not_represented <- if (all_count > 0) {
-    (not_rep_count / all_count) * 100
-  } else {
-    0
-  }
+  # 🛠️ **Create filtered rasters for REP & NOT_REP cases**
+  raster_represented <- terra::classify(larger_region_cover, 
+                                        as.matrix(df_represented[, c(cat_base_column_name, cat_base_column_name)]), 
+                                        others = NA)
   
-  # Initialize raster storage if needed
+  raster_not_represented <- terra::classify(larger_region_cover, 
+                                            as.matrix(df_not_represented[, c(cat_base_column_name, cat_base_column_name)]), 
+                                            others = NA)
+  
+  # Save rasters
   raster_outputs <- list()
-  
-  # Skip raster output if "NONE" is specified
-  if ("NONE" %in% out_rast_type) {
-    print("Skipping raster output as 'NONE' is specified.")
-  } else {
-    if ("NOT_REP" %in% out_rast_type) {
-      raster_outputs[["not_rep"]] <- save_rasters(raster_not_represented, df_not_represented, "not_rep", out_dir, clean_run_name, out_rast_values, perc_digits, rasters_in_memory, cat_base_column_name)
-    }
-    if ("REP" %in% out_rast_type) {
-      raster_outputs[["rep"]] <- save_rasters(raster_represented, df_represented, "rep", out_dir, clean_run_name, out_rast_values, perc_digits, rasters_in_memory, cat_base_column_name)
-    }
-    if ("FULL" %in% out_rast_type) {
-      raster_outputs[["full"]] <- save_rasters(larger_region_cover, landcover_analysis_output_raw, "full", out_dir, clean_run_name, out_rast_values, perc_digits, rasters_in_memory, cat_base_column_name)
-    }
+  if ("FULL" %in% out_rast_type) {
+    raster_outputs$full <- save_rasters(larger_region_cover, landcover_analysis_output_raw, "full",
+                                        out_dir, clean_run_name, out_rast_values, perc_digits, rasters_in_memory, cat_base_column_name)
+  }
+  if ("REP" %in% out_rast_type) {
+    raster_outputs$rep <- save_rasters(raster_represented, df_represented, "rep",
+                                       out_dir, clean_run_name, out_rast_values, perc_digits, rasters_in_memory, cat_base_column_name)
+  }
+  if ("NOT_REP" %in% out_rast_type) {
+    raster_outputs$not_rep <- save_rasters(raster_not_represented, df_not_represented, "not_rep",
+                                           out_dir, clean_run_name, out_rast_values, perc_digits, rasters_in_memory, cat_base_column_name)
   }
   
-  # Return results with rasters if requested
-  result <- list(
-    analysis_name = run_name,
-    df_raw = landcover_analysis_output_raw,
-    df_included = landcover_analysis_output_included,
-    df_represented = df_represented,
-    df_not_represented = df_not_represented,
-    perc_area_not_represented = perc_area_not_represented
-  )
-  
-  if (rasters_in_memory) {
-    result$rasters <- raster_outputs
-  }
-  
-  return(result)
+  return(list(analysis_name = run_name,
+              df_raw = landcover_analysis_output_raw,
+              df_included = landcover_analysis_output_included,
+              df_represented = df_represented,
+              df_not_represented = df_not_represented,
+              perc_area_not_represented = perc_area_not_represented,
+              rasters = if (rasters_in_memory) raster_outputs else NULL))
 }
 
 
+#' Save Raster Outputs from Categorical Cover Analysis - A helper function for function representative_categorical_cover_analysis
+#'
+#' Saves raster outputs in various formats based on user selection.
+#'
+#' @param raster A `SpatRaster` object to be saved.
+#' @param df A `data.frame` with categorical data used to generate raster values.
+#' @param raster_type A `character` string indicating the type of raster (`"rep"`, `"not_rep"`, `"full"`).
+#' @param out_dir A `character` string specifying the output directory.
+#' @param run_name A `character` string specifying the run name.
+#' @param out_rast_values A `character` or `vector` of output raster types:
+#'   - `"RAW"`: Outputs the raw raster.
+#'   - `"PERC_COVER_AOI"`: Outputs a raster with class percentages within the AOI.
+#'   - `"PERC_COVER_REGION"`: Outputs a raster with class percentages within the region.
+#' @param perc_digits An `integer` for rounding percentages in output rasters. `NA` means no rounding.
+#' @param rasters_in_memory A `logical`. If `TRUE`, returns rasters in memory; if `FALSE`, writes to disk.
+#' @param cat_base_column_name A `character` specifying the category column used in classification.
+#'
+#' @return A named list of raster outputs (if `rasters_in_memory = TRUE`), otherwise writes files and returns `NULL`.
+#'
+#' @export
 save_rasters <- function(raster, df, type, out_dir, clean_run_name, 
                          out_rast_values, perc_digits, rasters_in_memory, 
                          cat_base_column_name) {  
@@ -596,7 +634,7 @@ t <- representative_categorical_cover_analysis(raster = raster,
                                                raster_cat_df = raster_cats,
                                                region_shape = test,
                                                aoi_shape = areas_of_interest |> dplyr::filter(siteID == "NIWO"),
-                                               run_name = "TEST_D2",
+                                               run_name = "TEST_D2_2",
                                                cat_base_column_name = "VALUE",
                                                out_rast_values = c("RAW", "PERC_COVER_AOI", "PERC_COVER_REGION"),
                                                out_rast_type = c("REP", "NOT_REP", "FULL"),
@@ -607,10 +645,5 @@ t <- representative_categorical_cover_analysis(raster = raster,
                                                drop_classes = NA,
                                                drop_classes_column_name = NA,
                                                perc_digits = 2,
-                                               rasters_in_memory = FALSE)
-
-t_r <- t$rasters
-plot(t_r$full$RAW)
-plot(t_r$full$PERC_COVER_AOI)
-plot(t_r$full$PERC_COVER_REGION)
+                                               rasters_in_memory = TRUE)
 
