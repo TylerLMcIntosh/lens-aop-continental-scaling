@@ -1019,7 +1019,7 @@ bivariate_raster_viz_3 <- function(x,
                                    x_nm,
                                    y_nm) {
   
-  # ---- Parameter Checks ----
+  # Parameter Checks
   
   if (!inherits(x, "SpatRaster")) stop("Error: 'x' must be a SpatRaster object from the terra package.")
   if (!inherits(y, "SpatRaster")) stop("Error: 'y' must be a SpatRaster object from the terra package.")
@@ -1030,11 +1030,11 @@ bivariate_raster_viz_3 <- function(x,
   if (!is.character(y_nm) || length(y_nm) != 1) stop("Error: 'y_nm' must be a single character string.")
   
   
-  # ---- Spatial Consistency Check ----
+  # ---- Spatial Consistency Check
   if (!terra::compareGeom(x, y)) stop("Error: 'x' and 'y' must have the same geometry. Check CRS, extent, resolution, and origin.")
   
   
-  # ---- Normalize Data ----
+  # ---- Normalize Data 
   if (bi_normal) {
     x_norm <- bi_dimensional_normalize_raster(x, y)
     y_norm <- bi_dimensional_normalize_raster(y, x)
@@ -1043,34 +1043,34 @@ bivariate_raster_viz_3 <- function(x,
     y_norm <- normalize(y)
   }
   
-  # ---- Define Classification Breaks ----
+  # ---- Define Classification Breaks
   breaks <- seq(0, 1, length.out = 4)  # 3 categories (0-0.33, 0.33-0.67, 0.67-1)
   
-  # ---- Classify Raster Data ----
+  # ---- Classify Raster Data
   x_cat <- classify(x_norm, breaks, include.lowest = TRUE)
   y_cat <- classify(y_norm, breaks, include.lowest = TRUE)
   
-  # ---- Create Bivariate Classification Raster ----
+  # ---- Create Bivariate Classification Raster
   bivariate_raster <- (y_cat + 1) * 10 + (x_cat + 1)  # Unique ID for each bivariate class
   
-  # ---- Generate Bivariate Palette ----
+  # ---- Generate Bivariate Palette
   biv_p <- pals_bi_3(pals_pal, flip = flip)
   bivariate_palette <- biv_p$rgb_df
   
-  # ---- Convert Classification Raster to RGB ----
+  # ---- Convert Classification Raster to RGB
   R <- classify(bivariate_raster, bivariate_palette[, c("class", "R")])
   G <- classify(bivariate_raster, bivariate_palette[, c("class", "G")])
   B <- classify(bivariate_raster, bivariate_palette[, c("class", "B")])
   
-  # ---- Stack RGB Layers into a Single Raster ----
+  # ---- Stack RGB Layers into a Single Raster
   bivariate_rgb <- c(R, G, B)
   names(bivariate_rgb) <- c("R", "G", "B")
   
-  # ---- Plot the Bivariate Raster ----
+  # ---- Plot the Bivariate Raster
   biv_plot <- tmap::tm_shape(bivariate_rgb) +
     tmap::tm_rgb(r = 1, g = 2, b = 3, tm_scale_rgb(max_color_value = 255))
   
-  # ---- Create the Legend ----
+  # ---- Create the Legend
   bi_leg <- biscale::bi_legend(
     pal = biv_p$biscale_pal,
     dim = 3,
@@ -1079,7 +1079,7 @@ bivariate_raster_viz_3 <- function(x,
     pad_width = 3
   )
   
-  # ---- Return Plot and Legend ----
+  # ---- Return Plot and Legend
   return(list(
     biv_plot = biv_plot,
     legend = bi_leg
