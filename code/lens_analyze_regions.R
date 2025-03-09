@@ -34,7 +34,8 @@ install_and_load_packages(
     "stars",
     "furrr",
     "pals",
-    "biscale"),
+    "biscale",
+    "grid"),
   auto_install = "y"
 )
 
@@ -378,32 +379,29 @@ if(cyverse) {
 
 
 
-# FIX EDGE CASES: WHEN NOTHING IS INCLUDED IN THE COVERAGE OR NOTHING IS REMOVED, including NA
-
 t <- representative_categorical_cover_analysis(raster = raster,
                                                raster_cat_df = raster_cats,
                                                region_shape = test,
                                                aoi_shape = areas_of_interest |> dplyr::filter(siteID == "NIWO"),
-                                               run_name = "TEST_D2_3",
+                                               run_name = "TUESDAY_CRUISDAY2",
                                                cat_base_column_name = "VALUE",
                                                out_rast_values = c("RAW", "PERC_COVER_AOI", "PERC_COVER_REGION"),
                                                out_rast_type = c("REP", "NOT_REP", "FULL"),
                                                out_dir = here::here("data/derived"),
                                                new_sub_dir = TRUE,
-                                               min_aoi_coverage = 5,
+                                               min_aoi_coverage = NA,
                                                min_region_coverage = NA,
                                                drop_classes = NA,
                                                drop_classes_column_name = NA,
                                                perc_digits = 2,
-                                               raster_return = c("MEMORY", "WRITE"))
+                                               raster_return = c("WRITE", "MEMORY"))
 
 
-
-tt <- representative_categorical_cover_analysis(raster = raster,
+t <- representative_categorical_cover_analysis(raster = raster,
                                                raster_cat_df = raster_cats,
-                                               region_shape = test,
-                                               aoi_shape = areas_of_interest |> dplyr::filter(siteID == "NIWO"),
-                                               run_name = "TEST_D2_4",
+                                               region_shape = neon_region_polygons_merged[11,],
+                                               aoi_shape = neon_areas_of_interest_merged[11,],
+                                               run_name = "TEST_SouthernRockies",
                                                cat_base_column_name = "VALUE",
                                                out_rast_values = c("RAW", "PERC_COVER_AOI", "PERC_COVER_REGION"),
                                                out_rast_type = c("FULL"),
@@ -414,179 +412,74 @@ tt <- representative_categorical_cover_analysis(raster = raster,
                                                drop_classes = NA,
                                                drop_classes_column_name = NA,
                                                perc_digits = 2,
-                                               raster_return = c("MEMORY", "WRITE"))
-
+                                               raster_return = c("WRITE"))
 
 
 
 
 # REPRESENT GRAPHS
-df_raw <- t$df_raw
-
-ggplot(data = df_raw) +
-  geom_point(aes(x = region_perc, y = aoi_perc)) +
-  geom_abline(slope = 1,
-              intercept = 0,
-              color="blue") +
-  scale_y_continuous(trans=scales::pseudo_log_trans(base = 10),
-                     limits = c(0, 30)) +
-  scale_x_continuous(trans=scales::pseudo_log_trans(base = 10),
-                     limits = c(0, 30))
 
 
-ggplot(data = df_raw) +
-  geom_point(aes(x = region_perc, y = aoi_perc)) +
-  geom_abline(slope = 1,
-              intercept = 0,
-              color="blue") +
-  scale_y_continuous(trans=scales::pseudo_log_trans(base = 10),
-                     limits = c(0, 3)) +
-  scale_x_continuous(trans=scales::pseudo_log_trans(base = 10),
-                     limits = c(0, 3))
+represent_graph(t$df_raw,
+                log = TRUE,
+                #bivariate_background = TRUE,
+                manual_lim = NA)
+represent_graph(t$df_raw,
+                log = FALSE,
+                #bivariate_background = TRUE,
+                manual_lim = NA)
 
 
 
 
 
 
-# CREATE BIVARIATE MAP AND LEGEND
-
-install_and_load_packages("biscale", "pals")
-
-
-
-
-
-bivariate_raster_viz_3 <- function(x,
-                                   y,
-                                   bi_normal = TRUE,
-                                   pals_pal = pals::brewer.seqseq2(n = 9),
-                                   flip = FALSE,
-                                   x_nm,
-                                   y_nm) {
-  if(bi_normal) {
-    x_norm <- bi_dimensional_normalize_raster(x, y)
-    y_norm <- bi_dimensional_normalize_raster(y, x)
-  } else {
-    x_norm <- normalize(x, y)
-    y_norm <- normalize(y, x)
-  }
-
-  # Define classification breaks
-  breaks <- seq(0, 1, length.out = 4)  # 3 categories
-  
-  # Classify into categories
-  x_cat <- classify(x_norm, breaks, include.lowest = TRUE)
-  y_cat <- classify(y_norm, breaks, include.lowest = TRUE)
-  
-  # Create a single bivariate classification raster
-  bivariate_raster <- (y_cat + 1) * 10 + (x_cat + 1)  # Unique ID for each bivariate class
-  
-  biv_p <- pals_bi_3(pals_pal,
-                     flip = flip)
-  bivariate_palette <- biv_p$rgb_df
-  
-  # Convert classification raster to RGB layers
-  R <- classify(bivariate_raster, bivariate_palette[, c("class", "R")])
-  G <- classify(bivariate_raster, bivariate_palette[, c("class", "G")])
-  B <- classify(bivariate_raster, bivariate_palette[, c("class", "B")])
-  
-  # Stack RGB layers into a single raster
-  bivariate_rgb <- c(R, G, B)
-  names(bivariate_rgb) <- c("R", "G", "B")
-  
-  # Plot the RGB raster
-  biv_plot <- plotRGB(bivariate_rgb, r = 1, g = 2, b = 3, scale = 255, main = "Bivariate Raster Visualization")
-
-  # Create legend
-  bi_leg <- biscale::bi_legend(pal = biv_p$biscale_pal,
-                               dim = 3,
-                               xlab = x_nm,
-                               ylab = y_nm,
-                               pad_width = 3,
-                               ...)
-            
-  
-  return(list(biv_plot = biv_plot,
-              legend = bi_leg))  
-}
-
-
-
-
-
+# USE FUNCTIONS
 region <- t$rasters$full$PERC_COVER_REGION
 aoi <- t$rasters$full$PERC_COVER_AOI
 
-
+tic()
 bp <- bivariate_raster_viz_3(x = region,
                              y = aoi,
                              bi_normal = TRUE,
                              pals_pal = pals::brewer.seqseq2(n = 9),
                              flip = FALSE,
                              x_nm = "Region Coverage",
-                             y_nm = "AOI Coverage",
-                             ...)
+                             y_nm = "AOI Coverage")
+toc()
+
+tic()
+bp2 <- bivariate_raster_viz_3(x = region,
+                             y = aoi,
+                             bi_normal = FALSE,
+                             pals_pal = pals::brewer.seqseq2(n = 9),
+                             flip = FALSE,
+                             x_nm = "Region Coverage",
+                             y_nm = "AOI Coverage")
+toc()
 
 
+tic()
+bp <- bivariate_raster_viz_3(x = terra::aggregate(region, fact = 30, fun = "median"),
+                             y = terra::aggregate(aoi, fact = 30, fun = "median"),
+                             bi_normal = TRUE,
+                             pals_pal = pals::brewer.seqseq2(n = 9),
+                             flip = FALSE,
+                             x_nm = "Region Coverage",
+                             y_nm = "AOI Coverage")
+toc()
 
 
+tic()
+bp <- bivariate_raster_viz_3(x = log1p(terra::aggregate(region, fact = 30, fun = "median")),
+                             y = log1p(terra::aggregate(aoi, fact = 30, fun = "median")),
+                             bi_normal = TRUE,
+                             pals_pal = pals::brewer.seqseq2(n = 9),
+                             flip = FALSE,
+                             x_nm = "Log-transformed Region Coverage",
+                             y_nm = "Log-transformed AOI Coverage")
+toc()
 
-
-
-
-
-
-# 
-# 
-# # # Apply log transformation before normalization
-# # log_transform <- function(x) log1p(x)  # log(1 + x) avoids log(0) issues
-# # 
-# # aoi_log <- log_transform(aoi)
-# # region_log <- log_transform(region)
-# 
-# 
-# 
-# # aoi_norm <- normalize(aoi_log)
-# # region_norm <- normalize(region_log)
-# # aoi_norm <- normalize(aoi)
-# # region_norm <- normalize(region)
-# aoi_norm <- bi_dimensional_normalize_raster(aoi, region)
-# region_norm <- bi_dimensional_normalize_raster(region, aoi)
-# 
-# # Define classification breaks
-# breaks <- seq(0, 1, length.out = 4)  # 3 categories
-# 
-# # Classify into categories
-# aoi_cat <- classify(aoi_norm, breaks, include.lowest = TRUE)
-# region_cat <- classify(region_norm, breaks, include.lowest = TRUE)
-# 
-# # Create a single bivariate classification raster
-# bivariate_raster <- (aoi_cat + 1) * 10 + (region_cat + 1)  # Unique ID for each bivariate class
-# 
-# biv_p <- pals_bi_3(pals::brewer.seqseq2(n = 9),
-#                    flip = FALSE)
-# bivariate_palette <- biv_p$rgb_df
-# 
-# # Convert classification raster to RGB layers
-# R <- classify(bivariate_raster, bivariate_palette[, c("class", "R")])
-# G <- classify(bivariate_raster, bivariate_palette[, c("class", "G")])
-# B <- classify(bivariate_raster, bivariate_palette[, c("class", "B")])
-# 
-# # Stack RGB layers into a single raster
-# bivariate_rgb <- c(R, G, B)
-# names(bivariate_rgb) <- c("R", "G", "B")
-# 
-# # Plot the RGB raster
-# plotRGB(bivariate_rgb, r = 1, g = 2, b = 3, scale = 255, main = "Bivariate Raster Visualization (non-log Transformed)")
-# plot(aoi_cat)
-# plot(region_cat)
-# 
-# biscale::bi_legend(pal = biv_p$biscale_pal,
-#                    dim = 3,
-#                    xlab = "Regional Coverage",
-#                    ylab = "AOI Coverage",
-#                    pad_width = 3)
 
 
 

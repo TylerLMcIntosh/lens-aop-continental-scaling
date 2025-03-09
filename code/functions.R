@@ -208,200 +208,6 @@ condense_freq_groups <- function(freq_dats) {
 }
 
 
-# 
-# #out_rast_values = "BOTH", "PERC_COVER", or "RAW"
-# #out_rast_type = "BOTH", "REP", "NOT_REP", or "NONE"
-# representative_categorical_cover_analysis <- function(raster,
-#                                                       raster_cat_df,
-#                                                       region_shape,
-#                                                       aoi_shape,
-#                                                       run_name = "NotProvided",
-#                                                       cat_base_column_name, 
-#                                                       aoi_drop_perc = NA,
-#                                                       region_drop_perc = NA,
-#                                                       drop_classes = NA,
-#                                                       drop_classes_column_name = NA,
-#                                                       out_rast_values = "BOTH",
-#                                                       out_rast_type = "BOTH",
-#                                                       out_dir = "",
-#                                                       new_sub_dir = FALSE) {
-#   
-#   print(paste0("Operating on run: ", run_name))
-#   
-#   # Validate inputs
-#   if(!out_rast_values %in% c("BOTH", "PERC_COVER", "RAW")) {
-#     stop("Invalid value for 'out_rast_values'. Must be one of: 'BOTH', 'PERC_COVER', 'RAW'.")
-#   }
-#   
-#   if(!out_rast_type %in% c("BOTH", "REP", "NOT_REP", "NONE")) {
-#     stop("Invalid value for 'out_rast_values'. Must be one of: 'BOTH', 'REP', 'NOT_REP', 'NONE'.")
-#   }
-#   
-#   if(run_name == "NotProvided") {
-#     warning("You have not provided a run_name; 'NotProvided' will be used")
-#   }
-#   
-#   if(!cat_base_column_name %in% names(raster_cat_df)) {
-#     stop("cat_base_column_name must be one of the column names in raster_cat_df")
-#   }
-#   
-#   
-#   #Setup output directories
-#   clean_run_name <- run_name %>%
-#     gsub(" ", "", .) %>%
-#     gsub("/", "_", .) %>%
-#     gsub("\\.", "_", .)
-#   clean_aoi_dp <- gsub("\\.", "", as.character(aoi_drop_perc))
-#   clean_region_dp <- gsub("\\.", "", as.character(region_drop_perc))
-#   clean_run_name <- paste(clean_run_name, "_adp", clean_aoi_dp, "_rdp", clean_region_dp, sep = "")
-#   
-#   if(new_sub_dir) {
-#     out_dir <- here::here(out_dir, clean_run_name)
-#     dir_ensure(out_dir)
-#   }
-#   
-#   # Crop sub-regions for analysis
-#   print('Cropping to region')
-#   larger_region_cover <- crop_careful_universal(raster = raster, vector = region_shape, mask = TRUE, verbose = FALSE) 
-#   print(paste0('Cropping to sub-region aoi'))
-#   aoi_cover <- crop_careful_universal(raster = larger_region_cover, vector = aoi_shape, mask = TRUE, verbose = FALSE)
-#   
-#   # Analyze
-#   landcover_analysis_output_raw <- analyze_categorical_cover(aoi_raster = aoi_cover,
-#                                                              larger_region_raster = larger_region_cover,
-#                                                              raster_cat_df = raster_cat_df,
-#                                                              cat_base_column = cat_base_column_name)
-#   landcover_analysis_output_included <- landcover_analysis_output_raw
-#   
-#   
-#   
-#   # Remove any classes that are below the regional drop percentage, if specified
-#   # This is to keep data clean for rasters with many categories that are not common on the landscape
-#   if(!is.na(region_drop_perc)) {
-#     landcover_analysis_output_included <- landcover_analysis_output_included |>
-#       dplyr::filter(region_perc > region_drop_perc)
-#   }
-#   
-#   # Remove any specifically called out classes
-#   if (length(drop_classes) > 0 && !all(is.na(drop_classes))) {
-#     drop_classes_col_sym <- rlang::sym(drop_classes_column_name)
-#     landcover_analysis_output_included <- landcover_analysis_output_included |>
-#       dplyr::filter(!(.data[[drop_classes_column_name]] %in% drop_classes))
-#   }
-#   
-#   
-#   
-#   # Remove classes that are below a certain AOI percentage (i.e. that are not adequately represented within the aoi)
-#   if(!is.na(aoi_drop_perc)) {
-#     df_represented <- landcover_analysis_output_included |>
-#       dplyr::filter(aoi_perc > aoi_drop_perc)
-#     df_not_represented <- landcover_analysis_output_included |>
-#       dplyr::filter(aoi_perc <= aoi_drop_perc)
-#   }
-#   
-#   # OLD VERSION
-#   # #Get percentage of area not represented (only taking into account areas included)
-#   # perc_area_not_represented <- (sum(df_not_represented$region_count) / sum(landcover_analysis_output_included$region_count)) * 100
-#   
-#   
-#   # NEW VERSION
-#   not_rep_count <- df_not_represented |>
-#     dplyr::select(cat_base_column_name, region_count, aoi_count, region_perc, aoi_perc) |>
-#     dplyr::distinct() |>
-#     dplyr::pull(region_count) |>
-#     sum()
-#   
-#   all_count <- landcover_analysis_output_included |>
-#     dplyr::select(cat_base_column_name, region_count, aoi_count, region_perc, aoi_perc) |>
-#     dplyr::distinct() |>
-#     dplyr::pull(region_count) |>
-#     sum()
-#   
-# 
-#   perc_area_not_represented <- (not_rep_count / all_count) * 100
-#   #
-#   
-#   
-#   
-#   # Generate new raster data requested
-#   
-#   #Not represented areas
-#   if(out_rast_type == "BOTH" | out_rast_type == "NOT_REP") {
-#     print('Generating new rasters: Raster not represented')
-#     raster_not_represented <- keep_tif_values_in_df(raster = larger_region_cover, df = df_not_represented)
-#     
-#     if(out_rast_values == "RAW" | out_rast_values == "BOTH") {
-#       terra::writeRaster(raster_not_represented,
-#                          here::here(out_dir, paste0(clean_run_name, "_not_rep_raw.tif")),
-#                          overwrite = TRUE,
-#                          gdal = c("COMPRESS=DEFLATE"))
-#     }
-#     
-#     if(out_rast_values == "BOTH" | out_rast_values == "PERC_COVER") {
-#       print("Reclassifying output raster to use landscape percentage")
-#       not_rep_classify <- df_not_represented |>
-#         dplyr::select({{cat_base_column_name}}, region_perc) |>
-#         as.matrix()
-#       raster_not_represented <- raster_not_represented |>
-#         terra::classify(not_rep_classify)
-#       
-#       terra::writeRaster(raster_not_represented,
-#                          here::here(out_dir, paste0(clean_run_name, "_not_rep_perc_cover.tif")),
-#                          overwrite = TRUE,
-#                          gdal = c("COMPRESS=DEFLATE"))
-#     }
-#     
-#     rm(raster_not_represented)
-#     gc()
-#   }
-#     
-#   # represented areas
-#   if(out_rast_type == "BOTH" | out_rast_type == "REP") {
-#     
-#     print('Generating new rasters: Raster represented')
-#     raster_represented <- keep_tif_values_in_df(raster = larger_region_cover, df = df_represented)
-#     
-#     if(out_rast_values == "RAW" | out_rast_values == "BOTH") {
-#       terra::writeRaster(raster_represented,
-#                          here::here(out_dir, paste0(clean_run_name, "_rep_raw.tif")),
-#                          overwrite = TRUE,
-#                          gdal = c("COMPRESS=DEFLATE"))
-#     }
-#     
-#     if(out_rast_values == "BOTH" | out_rast_values == "PERC_COVER") {
-#       print("Reclassifying output raster to use landscape percentage")
-#       
-#       rep_classify <- df_represented |>
-#         dplyr::select({{cat_base_column_name}}, region_perc) |>
-#         as.matrix()
-#       raster_represented <- raster_represented |>
-#         terra::classify(rep_classify)
-#       
-#       terra::writeRaster(raster_represented,
-#                          here::here(out_dir, paste0(clean_run_name, "_rep_perc_cover.tif")),
-#                          overwrite = TRUE,
-#                          gdal = c("COMPRESS=DEFLATE"))
-#     }
-#     
-#     rm(raster_represented)
-#     gc()
-#   
-#   }
-#   
-#   # no rasters
-#   if(out_rast_type == "NONE") {
-#     print("You have not requested a written output raster, returning only in-memory non-spatial data")
-#   }
-#   
-#   return(list(analysis_name = run_name,
-#               df_raw = landcover_analysis_output_raw,
-#               df_included = landcover_analysis_output_included,
-#               df_represented = df_represented,
-#               df_not_represented = df_not_represented,
-#               perc_area_not_represented = perc_area_not_represented))
-# }
-
-
 
 #' Perform Representative Categorical Cover Analysis
 #'
@@ -440,10 +246,12 @@ condense_freq_groups <- function(freq_dats) {
 #'   - df_included: The filtered categorical cover analysis results.
 #'   - df_represented: The subset of represented classes.
 #'   - df_not_represented: The subset of underrepresented classes.
-#'   - perc_area_not_represented: The total percentage of the region covered by underrepresented classes.
-#'   - rasters: If rasters_in_memory = TRUE, a list of raster outputs.
+#'   - perc_area_not_represented: The total percentage of the region covered by underrepresented classes as defined by the thresholds.
+#'   - rasters: Ifrasters_return contains "MEMORY", a list of raster outputs.
+#'   - raster_file_names: If rasters_return contains "WRITE", a list of raster file names for written rasters.
 #'
 #' @export
+
 representative_categorical_cover_analysis <- function(raster,
                                                       raster_cat_df,
                                                       region_shape,
@@ -463,28 +271,9 @@ representative_categorical_cover_analysis <- function(raster,
   
   print(paste0("Operating on run: ", run_name))
   
-  # Validate input parameters
-  valid_rast_values <- c("RAW", "PERC_COVER_AOI", "PERC_COVER_REGION")
-  valid_rast_types <- c("REP", "NOT_REP", "FULL", "NONE")
-  valid_raster_return <- c("MEMORY", "WRITE")
-  
-  if (!all(out_rast_values %in% valid_rast_values)) {
-    stop("Invalid out_rast_values. Must be one or more of: 'RAW', 'PERC_COVER_AOI', 'PERC_COVER_REGION'.")
-  }
-  
-  if (!all(out_rast_type %in% valid_rast_types)) {
-    stop("Invalid out_rast_type. Must be one or more of: 'REP', 'NOT_REP', 'FULL', 'NONE'.")
-  }
-  
-  if (!all(raster_return %in% valid_raster_return)) {
-    stop("Invalid raster_return. Must be one or more of: 'MEMORY', 'WRITE'.")
-  }
-  
-  if (!cat_base_column_name %in% names(raster_cat_df)) {
-    stop("cat_base_column_name must be a column in raster_cat_df")
-  }
-  
-  print(paste0("Operating on run: ", run_name))
+  # Ensure min_aoi_coverage and min_region_coverage are within valid ranges
+  min_aoi_coverage <- ifelse(is.na(min_aoi_coverage) | min_aoi_coverage < 0, 0, min(min_aoi_coverage, 100))
+  min_region_coverage <- ifelse(is.na(min_region_coverage) | min_region_coverage < 0, 0, min(min_region_coverage, 100))
   
   # Set up output directory
   clean_run_name <- gsub(" ", "", run_name)
@@ -492,7 +281,7 @@ representative_categorical_cover_analysis <- function(raster,
   clean_region_dp <- gsub("\\.", "", as.character(min_region_coverage))
   clean_run_name <- paste(clean_run_name, "_aoi", clean_aoi_dp, "_region", clean_region_dp, sep = "")
   
-  if (new_sub_dir) {
+  if (new_sub_dir & "WRITE" %in% raster_return) {
     out_dir <- here::here(out_dir, clean_run_name)
     dir_ensure(out_dir)
   }
@@ -505,6 +294,21 @@ representative_categorical_cover_analysis <- function(raster,
   
   # Perform categorical cover analysis
   landcover_analysis_output_raw <- analyze_categorical_cover(aoi_cover, larger_region_cover, raster_cat_df, cat_base_column_name)
+  
+  # Determine max observed percentages
+  max_region_perc <- max(landcover_analysis_output_raw$region_perc, na.rm = TRUE)
+  max_aoi_perc <- max(landcover_analysis_output_raw$aoi_perc, na.rm = TRUE)
+  
+  # Adjust extreme min_region_coverage and min_aoi_coverage values
+  if (min_region_coverage > max_region_perc) {
+    warning(glue::glue("min_region_coverage ({min_region_coverage}%) exceeds all observed region percentages. Adjusting to {max_region_perc}%."))
+    min_region_coverage <- max_region_perc
+  }
+  
+  if (min_aoi_coverage > max_aoi_perc) {
+    warning(glue::glue("min_aoi_coverage ({min_aoi_coverage}%) exceeds all observed AOI percentages. Adjusting to {max_aoi_perc}%."))
+    min_aoi_coverage <- max_aoi_perc
+  }
   
   # Process drop classes and thresholding
   landcover_analysis_output_included <- landcover_analysis_output_raw
@@ -521,40 +325,103 @@ representative_categorical_cover_analysis <- function(raster,
   df_not_represented <- landcover_analysis_output_included |> dplyr::filter(aoi_perc <= min_aoi_coverage)
   
   # Compute percent not represented
-  perc_area_not_represented <- (sum(df_not_represented$region_count) / sum(landcover_analysis_output_included$region_count)) * 100
+  perc_area_not_represented <- ifelse(nrow(landcover_analysis_output_included) > 0,
+                                      (sum(df_not_represented$region_count) / sum(landcover_analysis_output_included$region_count)) * 100,
+                                      NA)
   
-  # 🛠️ **Create filtered rasters for REP & NOT_REP cases**
-  raster_represented <- terra::classify(larger_region_cover, 
-                                        as.matrix(df_represented[, c(cat_base_column_name, cat_base_column_name)]), 
-                                        others = NA)
+  # **Create filtered rasters for REP & NOT_REP cases**
+  create_empty_raster <- function(raster) terra::ifel(!is.na(raster), NA, NA)
   
-  raster_not_represented <- terra::classify(larger_region_cover, 
-                                            as.matrix(df_not_represented[, c(cat_base_column_name, cat_base_column_name)]), 
-                                            others = NA)
+  if (nrow(df_represented) > 0) {
+    raster_represented <- terra::classify(
+      larger_region_cover,
+      as.matrix(df_represented[, c(cat_base_column_name, cat_base_column_name)]),
+      others = NA
+    )
+  } else {
+    warning("No classes met the 'represented' threshold. Creating an empty raster.")
+    raster_represented <- create_empty_raster(larger_region_cover)
+  }
+  
+  if (nrow(df_not_represented) > 0) {
+    raster_not_represented <- terra::classify(
+      larger_region_cover,
+      as.matrix(df_not_represented[, c(cat_base_column_name, cat_base_column_name)]),
+      others = NA
+    )
+  } else {
+    warning("No classes met the 'not represented' threshold. Creating an empty raster.")
+    raster_not_represented <- create_empty_raster(larger_region_cover)
+  }
   
   # Save rasters
   raster_outputs <- list()
+  raster_files <- list()
+  # 
+  # if ("FULL" %in% out_rast_type) {
+  #   raster_outputs$full <- save_rasters(larger_region_cover, landcover_analysis_output_raw, "full",
+  #                                       out_dir, run_name, out_rast_values, perc_digits, raster_return,
+  #                                       cat_base_column_name)
+  #   raster_files$full <- raster_outputs$full$raster_files
+  # }
+  # if ("REP" %in% out_rast_type) {
+  #   raster_outputs$rep <- save_rasters(raster_represented, df_represented, "rep",
+  #                                      out_dir, run_name, out_rast_values, perc_digits, raster_return,
+  #                                      cat_base_column_name)
+  #   raster_files$rep <- raster_outputs$rep$raster_files
+  # }
+  # if ("NOT_REP" %in% out_rast_type) {
+  #   raster_outputs$not_rep <- save_rasters(raster_not_represented, df_not_represented, "not_rep",
+  #                                          out_dir, run_name, out_rast_values, perc_digits, raster_return,
+  #                                          cat_base_column_name)
+  #   raster_files$not_rep <- raster_outputs$not_rep$raster_files
+  # }
+  
+  
   if ("FULL" %in% out_rast_type) {
-    raster_outputs$full <- save_rasters(larger_region_cover, landcover_analysis_output_raw, "full",
-                                        out_dir, clean_run_name, out_rast_values, perc_digits, raster_return, cat_base_column_name)
+    result <- save_rasters(larger_region_cover, landcover_analysis_output_raw, "full",
+                           out_dir, run_name, out_rast_values, perc_digits, raster_return,
+                           cat_base_column_name)
+    raster_outputs$full <- result$raster_list
+    raster_files$full <- result$raster_files
   }
   if ("REP" %in% out_rast_type) {
-    raster_outputs$rep <- save_rasters(raster_represented, df_represented, "rep",
-                                       out_dir, clean_run_name, out_rast_values, perc_digits, raster_return, cat_base_column_name)
+    result <- save_rasters(larger_region_cover, df_represented, "rep",
+                           out_dir, run_name, out_rast_values, perc_digits, raster_return,
+                           cat_base_column_name)
+    raster_outputs$rep <- result$raster_list
+    raster_files$rep <- result$raster_files
   }
   if ("NOT_REP" %in% out_rast_type) {
-    raster_outputs$not_rep <- save_rasters(raster_not_represented, df_not_represented, "not_rep",
-                                           out_dir, clean_run_name, out_rast_values, perc_digits, raster_return, cat_base_column_name)
+    result <- save_rasters(larger_region_cover, df_not_represented, "not_rep",
+                           out_dir, run_name, out_rast_values, perc_digits, raster_return,
+                           cat_base_column_name)
+    raster_outputs$not_rep <- result$raster_list
+    raster_files$not_rep <- result$raster_files
   }
   
-  return(list(analysis_name = run_name,
+  params <- list(analysis_name = run_name,
+                 cat_base_column_name = cat_base_column_name,
+                 region_shape = region_shape,
+                 aoi_shape = aoi_shape,
+                 min_aoi_coverage = min_aoi_coverage,
+                 min_region_coverage = min_region_coverage,
+                 drop_classes = drop_classes,
+                 drop_classes_column_name = drop_classes_column_name,
+                 perc_digits = perc_digits)
+  
+  
+  return(list(params = params,
               df_raw = landcover_analysis_output_raw,
               df_included = landcover_analysis_output_included,
               df_represented = df_represented,
               df_not_represented = df_not_represented,
               perc_area_not_represented = perc_area_not_represented,
-              rasters = if ("MEMORY" %in% raster_return) raster_outputs else NULL))
+              rasters = if ("MEMORY" %in% raster_return) raster_outputs else NULL,
+              raster_file_names = if ("WRITE" %in% raster_return) raster_files else NULL))
 }
+
+
 
 
 #' Save Raster Outputs from Categorical Cover Analysis - A helper function for function representative_categorical_cover_analysis
@@ -579,12 +446,14 @@ representative_categorical_cover_analysis <- function(raster,
 #' @return A named list of raster outputs (if rasters_in_memory = TRUE), otherwise writes files and returns NULL.
 #'
 #' @export
-save_rasters <- function(raster, df, type, out_dir, clean_run_name, 
-                         out_rast_values, perc_digits, raster_return, 
-                         cat_base_column_name) {  
+
+save_rasters <- function(raster, df, type, out_dir, run_name,
+                         out_rast_values, perc_digits, raster_return,
+                         cat_base_column_name) {
   
-  base_path <- here::here(out_dir, paste0(clean_run_name, "_", type))
+  base_path <- here::here(out_dir, paste0(run_name, "_", type))
   raster_list <- list()
+  raster_files <- list()  # Store file paths of written rasters
   
   for (value_type in out_rast_values) {
     
@@ -598,6 +467,7 @@ save_rasters <- function(raster, df, type, out_dir, clean_run_name,
       if ("WRITE" %in% raster_return) {
         output_file <- paste0(base_path, "_raw.tif")
         terra::writeRaster(raster_raw, output_file, overwrite = TRUE, gdal = c("COMPRESS=DEFLATE"))
+        raster_files[[value_type]] <- output_file
       }
       
       next  # Skip to the next raster type
@@ -611,24 +481,37 @@ save_rasters <- function(raster, df, type, out_dir, clean_run_name,
     
     # Ensure the necessary columns exist
     if (!cat_base_column_name %in% colnames(df)) {
-      stop(glue::glue("Error: Column '{cat_base_column_name}' not found in the dataframe."))
+      warning(glue::glue("Skipping {value_type} raster: Column '{cat_base_column_name}' not found in dataframe."))
+      next
     }
     
     if (!metric_column %in% colnames(df)) {
-      stop(glue::glue("Error: Column '{metric_column}' not found in the dataframe."))
+      warning(glue::glue("Skipping {value_type} raster: Column '{metric_column}' not found in dataframe."))
+      next
     }
     
-    # Apply rounding if needed
-    df <- df |>
-      dplyr::mutate(!!metric_column := if (!is.na(perc_digits)) round(.data[[metric_column]], perc_digits) else .data[[metric_column]])
-    
-    # Create the classification matrix
-    reclass_matrix <- df |>
-      dplyr::select(all_of(cat_base_column_name), all_of(metric_column)) |> 
-      as.matrix()
-    
-    # Classify the raster
-    raster_reclassified <- terra::classify(raster, reclass_matrix)
+    # Ensure the dataframe isn't empty before classification
+    if (nrow(df) == 0) {
+      warning(glue::glue("Skipping {value_type} raster: No data available after filtering. Creating an empty raster."))
+      raster_reclassified <- terra::ifel(!is.na(raster), NA, NA)  # Raster filled with NA
+    } else {
+      # Apply rounding if needed
+      df <- df |>
+        dplyr::mutate(!!metric_column := if (!is.na(perc_digits)) round(.data[[metric_column]], perc_digits) else .data[[metric_column]])
+      
+      # Create the classification matrix
+      reclass_matrix <- df |>
+        dplyr::select(all_of(cat_base_column_name), all_of(metric_column)) |>
+        as.matrix()
+      
+      # Ensure the classification matrix has at least one row before calling terra::classify()
+      if (nrow(reclass_matrix) > 0) {
+        raster_reclassified <- terra::classify(raster, reclass_matrix)
+      } else {
+        warning(glue::glue("Skipping {value_type} raster: Classification matrix is empty. Creating an empty raster."))
+        raster_reclassified <- terra::ifel(!is.na(raster), NA, NA)
+      }
+    }
     
     if ("MEMORY" %in% raster_return) {
       raster_list[[value_type]] <- raster_reclassified
@@ -636,16 +519,112 @@ save_rasters <- function(raster, df, type, out_dir, clean_run_name,
     if ("WRITE" %in% raster_return) {
       output_file <- paste0(base_path, "_", tolower(value_type), ".tif")
       terra::writeRaster(raster_reclassified, output_file, overwrite = TRUE, gdal = c("COMPRESS=DEFLATE"))
+      raster_files[[value_type]] <- output_file
     }
   }
   
-  if ("MEMORY" %in% raster_return) {
-    return(raster_list)
-  }
-  if("WRITE" %in% raster_return) {
-    return(invisible(NULL))
-  }
+  result <- list()
+  if ("MEMORY" %in% raster_return) result$raster_list <- raster_list
+  if ("WRITE" %in% raster_return) result$raster_files <- raster_files
+  
+  return(result)
 }
+
+
+
+
+
+
+# save_rasters <- function(raster, df, type, out_dir, run_name, 
+#                          out_rast_values, perc_digits, raster_return, 
+#                          cat_base_column_name, new_sub_dir = FALSE) {  
+#   
+#   # Ensure output directory structure
+#   if (new_sub_dir & "WRITE" %in% raster_return) {
+#     out_dir <- file.path(out_dir, run_name)
+#     dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+#   }
+#   
+#   base_path <- file.path(out_dir, paste0(run_name, "_", type))
+#   raster_list <- list()
+#   
+#   for (value_type in out_rast_values) {
+#     
+#     # If RAW, directly return/write the clipped raster without reclassification
+#     if (value_type == "RAW") {
+#       raster_raw <- raster  # Just retain the original values
+#       
+#       if ("MEMORY" %in% raster_return) {
+#         raster_list[[value_type]] <- raster_raw
+#       }
+#       if ("WRITE" %in% raster_return) {
+#         output_file <- paste0(base_path, "_raw.tif")
+#         terra::writeRaster(raster_raw, output_file, overwrite = TRUE, gdal = c("COMPRESS=DEFLATE"))
+#       }
+#       
+#       next  # Skip to the next raster type
+#     }
+#     
+#     # Determine the appropriate metric column
+#     metric_column <- switch(value_type,
+#                             "PERC_COVER_AOI" = "aoi_perc",
+#                             "PERC_COVER_REGION" = "region_perc",
+#                             stop(glue::glue("Invalid out_rast_values option: {value_type}")))
+#     
+#     # Ensure the necessary columns exist
+#     if (!cat_base_column_name %in% colnames(df)) {
+#       warning(glue::glue("Skipping {value_type} raster: Column '{cat_base_column_name}' not found in dataframe."))
+#       next
+#     }
+#     
+#     if (!metric_column %in% colnames(df)) {
+#       warning(glue::glue("Skipping {value_type} raster: Column '{metric_column}' not found in dataframe."))
+#       next
+#     }
+#     
+#     # Ensure the dataframe isn't empty before classification
+#     if (nrow(df) == 0) {
+#       warning(glue::glue("Skipping {value_type} raster: No data available after filtering. Creating an empty raster."))
+#       raster_reclassified <- terra::ifel(!is.na(raster), NA, NA)  # Raster filled with NA
+#     } else {
+#       # Apply rounding if needed
+#       df <- df |>
+#         dplyr::mutate(!!metric_column := if (!is.na(perc_digits)) round(.data[[metric_column]], perc_digits) else .data[[metric_column]])
+#       
+#       # Create the classification matrix
+#       reclass_matrix <- df |>
+#         dplyr::select(all_of(cat_base_column_name), all_of(metric_column)) |> 
+#         as.matrix()
+#       
+#       # Ensure the classification matrix has at least one row before calling terra::classify()
+#       if (nrow(reclass_matrix) > 0) {
+#         raster_reclassified <- terra::classify(raster, reclass_matrix)
+#       } else {
+#         warning(glue::glue("Skipping {value_type} raster: Classification matrix is empty. Creating an empty raster."))
+#         raster_reclassified <- terra::ifel(!is.na(raster), NA, NA)
+#       }
+#     }
+#     
+#     if ("MEMORY" %in% raster_return) {
+#       raster_list[[value_type]] <- raster_reclassified
+#     }
+#     if ("WRITE" %in% raster_return) {
+#       output_file <- paste0(base_path, "_", tolower(value_type), ".tif")
+#       terra::writeRaster(raster_reclassified, output_file, overwrite = TRUE, gdal = c("COMPRESS=DEFLATE"))
+#     }
+#   }
+#   
+#   if ("MEMORY" %in% raster_return) {
+#     return(raster_list)
+#   }
+#   if ("WRITE" %in% raster_return) {
+#     return(invisible(NULL))
+#   }
+# }
+
+
+
+
 
 
 ## Function to analyze landcover comparisons between AOI and a larger region.
@@ -749,6 +728,123 @@ keep_tif_values_in_df <- function(raster, df) {
   levels(new_raster) <- c
   
   return(new_raster)
+}
+
+
+
+#' Represent Graph of Coverage Comparison
+#'
+#' This function generates a scatter plot comparing regional coverage percentages
+#' (`region_perc`) and area of interest (AOI) coverage percentages (`aoi_perc`).
+#' It also calculates and displays absolute differences, including mean and median
+#' values across different coverage thresholds.
+#'
+#' @param coverage_df A data frame containing columns `region_perc`, `aoi_perc`, 
+#'   and `diff_in_perc`, where `region_perc` and `aoi_perc` represent coverage
+#'   percentages, and `diff_in_perc` represents their difference.
+#' @param manual_lim Optional numeric value to manually set the axis limits. If `NA` (default),
+#'   the global maximum of `region_perc` and `aoi_perc` is used.
+#' @param log Logical, whether to apply a pseudo-logarithmic scale to the axes. Default is `FALSE`.
+#'
+#' @return A `ggplot2` object representing the scatter plot.
+#'
+#' @details
+#' - The plot includes a 45-degree reference line (`y = x`) in red to indicate perfect agreement.
+#' - A caption summarizes mean and median absolute differences for all data points, as well
+#'   as subsets with `region_perc` greater than 1% and 5%.
+#' - If `log = TRUE`, a pseudo-logarithmic scale is applied to both axes.
+#'
+#' @importFrom dplyr filter pull
+#' @importFrom ggplot2 ggplot geom_point geom_abline theme_minimal labs
+#' @importFrom scales pseudo_log_trans
+#'
+#' @examples
+#' \dontrun{
+#' library(ggplot2)
+#' library(dplyr)
+#' 
+#' # Example data frame
+#' coverage_df <- data.frame(
+#'   region_perc = runif(100, 0, 100),
+#'   aoi_perc = runif(100, 0, 100),
+#'   diff_in_perc = runif(100, -10, 10)
+#' )
+#'
+#' # Default plot
+#' represent_graph(coverage_df)
+#'
+#' # Log scale plot
+#' represent_graph(coverage_df, log = TRUE)
+#'
+#' # Custom axis limit
+#' represent_graph(coverage_df, manual_lim = 50)
+#' }
+#'
+#' @export
+represent_graph <- function(coverage_df,
+                            manual_lim = NA,
+                            log = FALSE) {
+  if (is.na(manual_lim)) {
+    global_max <- max(coverage_df$region_perc, coverage_df$aoi_perc)
+  } else {
+    global_max <- manual_lim
+  }
+  
+  # Calculate perpendicular residuals to the 45-degree line
+  coverage_df$diff_in_perc_abs <- abs(coverage_df$diff_in_perc)
+  mean_diff <- mean(coverage_df$diff_in_perc_abs, na.rm = TRUE)
+  median_diff <- median(coverage_df$diff_in_perc_abs, na.rm = TRUE)
+  
+  mean_diff_over_1_perc <- mean(coverage_df |>
+                                  dplyr::filter(region_perc > 1) |>
+                                  dplyr::pull(diff_in_perc_abs), na.rm = TRUE)
+  median_diff_over_1_perc <- median(coverage_df |>
+                                      dplyr::filter(region_perc > 1) |>
+                                      dplyr::pull(diff_in_perc_abs), na.rm = TRUE)
+  
+  mean_diff_over_5_perc <- mean(coverage_df |>
+                                  dplyr::filter(region_perc > 5) |>
+                                  dplyr::pull(diff_in_perc_abs), na.rm = TRUE)
+  median_diff_over_5_perc <- median(coverage_df |>
+                                      dplyr::filter(region_perc > 5) |>
+                                      dplyr::pull(diff_in_perc_abs), na.rm = TRUE)
+  
+  # Construct the caption text
+  caption_text <- sprintf("All classes: Mean Abs. Difference: %.2f | Median Abs. Difference: %.2f\nAll classes with >1%% regional coverage: Mean Abs. Difference: %.2f | Median Abs. Difference: %.2f\nAll classes with >5%% regional coverage: Mean Abs. Difference: %.2f | Median Abs. Difference: %.2f",
+                          mean_diff, median_diff, 
+                          mean_diff_over_1_perc, median_diff_over_1_perc,
+                          mean_diff_over_5_perc, median_diff_over_5_perc)
+  
+  p <- ggplot(data = coverage_df) +
+    geom_point(aes(x = region_perc, y = aoi_perc)) +
+    geom_abline(slope = 1, intercept = 0, color = "red", lty = 2) +
+    theme_minimal() +
+    labs(caption = caption_text)
+  
+  if (log) {
+    p <- p +
+      scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
+                         limits = c(0, global_max)) +
+      scale_x_continuous(trans = scales::pseudo_log_trans(base = 10),
+                         limits = c(0, global_max)) +
+      xlab("Regional Coverage Percentage (log scale)") +
+      ylab("Area of Interest Coverage Percentage (log scale)")
+  } else {
+    p <- p +
+      scale_y_continuous(limits = c(0, global_max)) +
+      scale_x_continuous(limits = c(0, global_max)) +
+      xlab("Regional Coverage Percentage") +
+      ylab("Area of Interest Coverage Percentage")
+  }
+  
+  # if(bivariate_background) {
+  #
+  #   p <- p +
+  #     annotate("rect", xmin=10, xmax=15, ymin=0, ymax=Inf, alpha=0.1, fill="gold")
+  #
+  # }
+  
+  return(p)
 }
 
 
@@ -877,6 +973,118 @@ bi_dimensional_normalize_raster <- function(x, y) {
 }
 
 
+
+#' Bivariate Raster Visualization
+#'
+#' This function generates a bivariate raster visualization by normalizing two raster datasets, classifying them
+#' into categories, and mapping them to a bivariate color scale.
+#'
+#' @param x A `SpatRaster` object from the `terra` package representing the first variable.
+#' @param y A `SpatRaster` object from the `terra` package representing the second variable.
+#' @param bi_normal Logical; if `TRUE`, applies bivariate normalization using `bi_dimensional_normalize_raster()`;
+#'   otherwise, applies standard normalization using `normalize()`.
+#' @param pals_pal A character vector of exactly 9 hex color codes defining the bivariate color palette.
+#' @param flip Logical; if `TRUE`, the color palette is reversed.
+#' @param x_nm Character; label for the x-axis in the legend.
+#' @param y_nm Character; label for the y-axis in the legend.
+#'
+#' @return A list containing:
+#'   - `biv_plot`: A `tmap` object displaying the bivariate raster visualization.
+#'   - `legend`: A `ggplot` object representing the legend for the bivariate color scale.
+#'
+#' @details The function:
+#'   1. Normalizes the raster values.
+#'   2. Categorizes them into three levels per variable (total 3x3 = 9 classes).
+#'   3. Maps classified values to a predefined bivariate color palette.
+#'   4. Generates an RGB raster for visualization.
+#'   5. Uses `tmap::tm_rgb()` for rendering.
+#'   6. Creates a legend using `biscale::bi_legend()`.
+#'
+#' @examples
+#' \dontrun{
+#' library(terra)
+#' r1 <- rast(matrix(runif(100, 10, 50), 10, 10))
+#' r2 <- rast(matrix(runif(100, 20, 60), 10, 10))
+#' result <- bivariate_raster_viz_3(r1, r2, x_nm = "Variable X", y_nm = "Variable Y")
+#' print(result$biv_plot)
+#' print(result$legend)
+#' }
+#'
+#' @export
+bivariate_raster_viz_3 <- function(x,
+                                   y,
+                                   bi_normal = TRUE,
+                                   pals_pal = pals::brewer.seqseq2(n = 9),
+                                   flip = FALSE,
+                                   x_nm,
+                                   y_nm) {
+  
+  # ---- Parameter Checks ----
+  
+  if (!inherits(x, "SpatRaster")) stop("Error: 'x' must be a SpatRaster object from the terra package.")
+  if (!inherits(y, "SpatRaster")) stop("Error: 'y' must be a SpatRaster object from the terra package.")
+  if (!is.logical(bi_normal) || length(bi_normal) != 1) stop("Error: 'bi_normal' must be a logical value (TRUE/FALSE).")
+  if (!is.character(pals_pal) || length(pals_pal) != 9) stop("Error: 'pals_pal' must be a character vector of exactly 9 hex color codes.")
+  if (!is.logical(flip) || length(flip) != 1) stop("Error: 'flip' must be a logical value (TRUE/FALSE).")
+  if (!is.character(x_nm) || length(x_nm) != 1) stop("Error: 'x_nm' must be a single character string.")
+  if (!is.character(y_nm) || length(y_nm) != 1) stop("Error: 'y_nm' must be a single character string.")
+  
+  
+  # ---- Spatial Consistency Check ----
+  if (!terra::compareGeom(x, y)) stop("Error: 'x' and 'y' must have the same geometry. Check CRS, extent, resolution, and origin.")
+  
+  
+  # ---- Normalize Data ----
+  if (bi_normal) {
+    x_norm <- bi_dimensional_normalize_raster(x, y)
+    y_norm <- bi_dimensional_normalize_raster(y, x)
+  } else {
+    x_norm <- normalize(x)
+    y_norm <- normalize(y)
+  }
+  
+  # ---- Define Classification Breaks ----
+  breaks <- seq(0, 1, length.out = 4)  # 3 categories (0-0.33, 0.33-0.67, 0.67-1)
+  
+  # ---- Classify Raster Data ----
+  x_cat <- classify(x_norm, breaks, include.lowest = TRUE)
+  y_cat <- classify(y_norm, breaks, include.lowest = TRUE)
+  
+  # ---- Create Bivariate Classification Raster ----
+  bivariate_raster <- (y_cat + 1) * 10 + (x_cat + 1)  # Unique ID for each bivariate class
+  
+  # ---- Generate Bivariate Palette ----
+  biv_p <- pals_bi_3(pals_pal, flip = flip)
+  bivariate_palette <- biv_p$rgb_df
+  
+  # ---- Convert Classification Raster to RGB ----
+  R <- classify(bivariate_raster, bivariate_palette[, c("class", "R")])
+  G <- classify(bivariate_raster, bivariate_palette[, c("class", "G")])
+  B <- classify(bivariate_raster, bivariate_palette[, c("class", "B")])
+  
+  # ---- Stack RGB Layers into a Single Raster ----
+  bivariate_rgb <- c(R, G, B)
+  names(bivariate_rgb) <- c("R", "G", "B")
+  
+  # ---- Plot the Bivariate Raster ----
+  biv_plot <- tmap::tm_shape(bivariate_rgb) +
+    tmap::tm_rgb(r = 1, g = 2, b = 3, tm_scale_rgb(max_color_value = 255))
+  
+  # ---- Create the Legend ----
+  bi_leg <- biscale::bi_legend(
+    pal = biv_p$biscale_pal,
+    dim = 3,
+    xlab = x_nm,
+    ylab = y_nm,
+    pad_width = 3
+  )
+  
+  # ---- Return Plot and Legend ----
+  return(list(
+    biv_plot = biv_plot,
+    legend = bi_leg
+  ))
+}
 
 
 # Generating plots ----

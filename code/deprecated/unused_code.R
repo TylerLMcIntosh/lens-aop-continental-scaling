@@ -646,3 +646,528 @@
 # 
 
 
+
+
+
+# Older function versions
+
+# save_rasters <- function(raster, df, type, out_dir, clean_run_name, 
+#                          out_rast_values, perc_digits, raster_return, 
+#                          cat_base_column_name) {  
+#   
+#   base_path <- here::here(out_dir, paste0(clean_run_name, "_", type))
+#   raster_list <- list()
+#   
+#   for (value_type in out_rast_values) {
+#     
+#     # If RAW, directly return/write the clipped raster without reclassification
+#     if (value_type == "RAW") {
+#       raster_raw <- raster  # Just retain the original values
+#       
+#       if ("MEMORY" %in% raster_return) {
+#         raster_list[[value_type]] <- raster_raw
+#       }
+#       if ("WRITE" %in% raster_return) {
+#         output_file <- paste0(base_path, "_raw.tif")
+#         terra::writeRaster(raster_raw, output_file, overwrite = TRUE, gdal = c("COMPRESS=DEFLATE"))
+#       }
+#       
+#       next  # Skip to the next raster type
+#     }
+#     
+#     # Determine the appropriate metric column
+#     metric_column <- switch(value_type,
+#                             "PERC_COVER_AOI" = "aoi_perc",
+#                             "PERC_COVER_REGION" = "region_perc",
+#                             stop(glue::glue("Invalid out_rast_values option: {value_type}")))
+#     
+#     # Ensure the necessary columns exist
+#     if (!cat_base_column_name %in% colnames(df)) {
+#       stop(glue::glue("Error: Column '{cat_base_column_name}' not found in the dataframe."))
+#     }
+#     
+#     if (!metric_column %in% colnames(df)) {
+#       stop(glue::glue("Error: Column '{metric_column}' not found in the dataframe."))
+#     }
+#     
+#     # Apply rounding if needed
+#     df <- df |>
+#       dplyr::mutate(!!metric_column := if (!is.na(perc_digits)) round(.data[[metric_column]], perc_digits) else .data[[metric_column]])
+#     
+#     # Create the classification matrix
+#     reclass_matrix <- df |>
+#       dplyr::select(all_of(cat_base_column_name), all_of(metric_column)) |> 
+#       as.matrix()
+#     
+#     # Classify the raster
+#     raster_reclassified <- terra::classify(raster, reclass_matrix)
+#     
+#     if ("MEMORY" %in% raster_return) {
+#       raster_list[[value_type]] <- raster_reclassified
+#     }
+#     if ("WRITE" %in% raster_return) {
+#       output_file <- paste0(base_path, "_", tolower(value_type), ".tif")
+#       terra::writeRaster(raster_reclassified, output_file, overwrite = TRUE, gdal = c("COMPRESS=DEFLATE"))
+#     }
+#   }
+#   
+#   if ("MEMORY" %in% raster_return) {
+#     return(raster_list)
+#   }
+#   if("WRITE" %in% raster_return) {
+#     return(invisible(NULL))
+#   }
+# }
+
+
+
+# representative_categorical_cover_analysis <- function(raster,
+#                                                       raster_cat_df,
+#                                                       region_shape,
+#                                                       aoi_shape,
+#                                                       run_name = "NotProvided",
+#                                                       cat_base_column_name, 
+#                                                       min_aoi_coverage = NA,
+#                                                       min_region_coverage = NA,
+#                                                       drop_classes = NA,
+#                                                       drop_classes_column_name = NA,
+#                                                       out_rast_values = c("RAW", "PERC_COVER_AOI", "PERC_COVER_REGION"),
+#                                                       out_rast_type = c("REP", "NOT_REP", "FULL"),
+#                                                       out_dir = "",
+#                                                       new_sub_dir = FALSE,
+#                                                       perc_digits = NA,
+#                                                       raster_return = "MEMORY") {
+#   
+#   print(paste0("Operating on run: ", run_name))
+#   
+#   # Treat NA min_aoi_coverage as zero
+#   if (is.na(min_aoi_coverage)) {
+#     min_aoi_coverage <- 0
+#   }
+#   # Ensure min_region_coverage is not NA (assuming default of 0 if not provided)
+#   if (is.na(min_region_coverage)) {
+#     min_region_coverage <- 0
+#   }
+#   
+#   # Validate input parameters
+#   valid_rast_values <- c("RAW", "PERC_COVER_AOI", "PERC_COVER_REGION")
+#   valid_rast_types <- c("REP", "NOT_REP", "FULL", "NONE")
+#   valid_raster_return <- c("MEMORY", "WRITE")
+#   
+#   if (!all(out_rast_values %in% valid_rast_values)) {
+#     stop("Invalid out_rast_values. Must be one or more of: 'RAW', 'PERC_COVER_AOI', 'PERC_COVER_REGION'.")
+#   }
+#   
+#   if (!all(out_rast_type %in% valid_rast_types)) {
+#     stop("Invalid out_rast_type. Must be one or more of: 'REP', 'NOT_REP', 'FULL', 'NONE'.")
+#   }
+#   
+#   if (!all(raster_return %in% valid_raster_return)) {
+#     stop("Invalid raster_return. Must be one or more of: 'MEMORY', 'WRITE'.")
+#   }
+#   
+#   if (!cat_base_column_name %in% names(raster_cat_df)) {
+#     stop("cat_base_column_name must be a column in raster_cat_df")
+#   }
+#   
+#   print(paste0("Operating on run: ", run_name))
+#   
+#   # Set up output directory
+#   clean_run_name <- gsub(" ", "", run_name)
+#   clean_aoi_dp <- gsub("\\.", "", as.character(min_aoi_coverage))
+#   clean_region_dp <- gsub("\\.", "", as.character(min_region_coverage))
+#   clean_run_name <- paste(clean_run_name, "_aoi", clean_aoi_dp, "_region", clean_region_dp, sep = "")
+#   
+#   if (new_sub_dir) {
+#     out_dir <- here::here(out_dir, clean_run_name)
+#     dir_ensure(out_dir)
+#   }
+#   
+#   # Crop to region and AOI
+#   print("Cropping to region")
+#   larger_region_cover <- crop_careful_universal(raster, region_shape, mask = TRUE)
+#   print("Cropping to AOI")
+#   aoi_cover <- crop_careful_universal(larger_region_cover, aoi_shape, mask = TRUE)
+#   
+#   # Perform categorical cover analysis
+#   landcover_analysis_output_raw <- analyze_categorical_cover(aoi_cover, larger_region_cover, raster_cat_df, cat_base_column_name)
+#   
+#   # Process drop classes and thresholding
+#   landcover_analysis_output_included <- landcover_analysis_output_raw
+#   if (!is.na(min_region_coverage)) {
+#     landcover_analysis_output_included <- landcover_analysis_output_included |> dplyr::filter(region_perc > min_region_coverage)
+#   }
+#   if (length(drop_classes) > 0 && !all(is.na(drop_classes))) {
+#     landcover_analysis_output_included <- landcover_analysis_output_included |> 
+#       dplyr::filter(!(.data[[drop_classes_column_name]] %in% drop_classes))
+#   }
+#   
+#   # Split into represented and not represented classes
+#   df_represented <- landcover_analysis_output_included |> dplyr::filter(aoi_perc > min_aoi_coverage)
+#   df_not_represented <- landcover_analysis_output_included |> dplyr::filter(aoi_perc <= min_aoi_coverage)
+#   
+#   # Compute percent not represented
+#   perc_area_not_represented <- (sum(df_not_represented$region_count) / sum(landcover_analysis_output_included$region_count)) * 100
+#   
+#   # 🛠️ **Create filtered rasters for REP & NOT_REP cases**
+#   raster_represented <- terra::classify(larger_region_cover, 
+#                                         as.matrix(df_represented[, c(cat_base_column_name, cat_base_column_name)]), 
+#                                         others = NA)
+#   
+#   raster_not_represented <- terra::classify(larger_region_cover, 
+#                                             as.matrix(df_not_represented[, c(cat_base_column_name, cat_base_column_name)]), 
+#                                             others = NA)
+#   
+#   # Save rasters
+#   raster_outputs <- list()
+#   if ("FULL" %in% out_rast_type) {
+#     raster_outputs$full <- save_rasters(larger_region_cover, landcover_analysis_output_raw, "full",
+#                                         out_dir, clean_run_name, out_rast_values, perc_digits, raster_return, cat_base_column_name)
+#   }
+#   if ("REP" %in% out_rast_type) {
+#     raster_outputs$rep <- save_rasters(raster_represented, df_represented, "rep",
+#                                        out_dir, clean_run_name, out_rast_values, perc_digits, raster_return, cat_base_column_name)
+#   }
+#   if ("NOT_REP" %in% out_rast_type) {
+#     raster_outputs$not_rep <- save_rasters(raster_not_represented, df_not_represented, "not_rep",
+#                                            out_dir, clean_run_name, out_rast_values, perc_digits, raster_return, cat_base_column_name)
+#   }
+#   
+#   return(list(analysis_name = run_name,
+#               df_raw = landcover_analysis_output_raw,
+#               df_included = landcover_analysis_output_included,
+#               df_represented = df_represented,
+#               df_not_represented = df_not_represented,
+#               perc_area_not_represented = perc_area_not_represented,
+#               rasters = if ("MEMORY" %in% raster_return) raster_outputs else NULL))
+# }
+
+
+
+# representative_categorical_cover_analysis <- function(raster,
+#                                                       raster_cat_df,
+#                                                       region_shape,
+#                                                       aoi_shape,
+#                                                       run_name = "NotProvided",
+#                                                       cat_base_column_name, 
+#                                                       min_aoi_coverage = NA,
+#                                                       min_region_coverage = NA,
+#                                                       drop_classes = NA,
+#                                                       drop_classes_column_name = NA,
+#                                                       out_rast_values = c("RAW", "PERC_COVER_AOI", "PERC_COVER_REGION"),
+#                                                       out_rast_type = c("REP", "NOT_REP", "FULL"),
+#                                                       out_dir = "",
+#                                                       new_sub_dir = FALSE,
+#                                                       perc_digits = NA,
+#                                                       raster_return = "MEMORY") {
+#   
+#   print(paste0("Operating on run: ", run_name))
+#   
+#   # Ensure min_aoi_coverage and min_region_coverage are within valid ranges
+#   min_aoi_coverage <- ifelse(is.na(min_aoi_coverage) | min_aoi_coverage < 0, 0, min(min_aoi_coverage, 100))
+#   min_region_coverage <- ifelse(is.na(min_region_coverage) | min_region_coverage < 0, 0, min(min_region_coverage, 100))
+#   
+#   # Validate input parameters
+#   valid_rast_values <- c("RAW", "PERC_COVER_AOI", "PERC_COVER_REGION")
+#   valid_rast_types <- c("REP", "NOT_REP", "FULL", "NONE")
+#   valid_raster_return <- c("MEMORY", "WRITE")
+#   
+#   if (!all(out_rast_values %in% valid_rast_values)) {
+#     stop("Invalid out_rast_values. Must be one or more of: 'RAW', 'PERC_COVER_AOI', 'PERC_COVER_REGION'.")
+#   }
+#   
+#   if (!all(out_rast_type %in% valid_rast_types)) {
+#     stop("Invalid out_rast_type. Must be one or more of: 'REP', 'NOT_REP', 'FULL', 'NONE'.")
+#   }
+#   
+#   if (!all(raster_return %in% valid_raster_return)) {
+#     stop("Invalid raster_return. Must be one or more of: 'MEMORY', 'WRITE'.")
+#   }
+#   
+#   if (!cat_base_column_name %in% names(raster_cat_df)) {
+#     stop("cat_base_column_name must be a column in raster_cat_df")
+#   }
+#   
+#   print(paste0("Operating on run: ", run_name))
+#   
+#   # Set up output directory
+#   clean_run_name <- gsub(" ", "", run_name)
+#   clean_aoi_dp <- gsub("\\.", "", as.character(min_aoi_coverage))
+#   clean_region_dp <- gsub("\\.", "", as.character(min_region_coverage))
+#   clean_run_name <- paste(clean_run_name, "_aoi", clean_aoi_dp, "_region", clean_region_dp, sep = "")
+#   
+#   if (new_sub_dir) {
+#     out_dir <- here::here(out_dir, clean_run_name)
+#     dir_ensure(out_dir)
+#   }
+#   
+#   # Crop to region and AOI
+#   print("Cropping to region")
+#   larger_region_cover <- crop_careful_universal(raster, region_shape, mask = TRUE)
+#   print("Cropping to AOI")
+#   aoi_cover <- crop_careful_universal(larger_region_cover, aoi_shape, mask = TRUE)
+#   
+#   # Perform categorical cover analysis
+#   landcover_analysis_output_raw <- analyze_categorical_cover(aoi_cover, larger_region_cover, raster_cat_df, cat_base_column_name)
+#   
+#   # Determine maximum observed percentages
+#   max_region_perc <- max(landcover_analysis_output_raw$region_perc, na.rm = TRUE)
+#   max_aoi_perc <- max(landcover_analysis_output_raw$aoi_perc, na.rm = TRUE)
+#   
+#   # Adjust extreme min_region_coverage and min_aoi_coverage values
+#   if (min_region_coverage > max_region_perc) {
+#     warning(glue::glue("min_region_coverage ({min_region_coverage}%) exceeds all observed region percentages. Adjusting to {max_region_perc}%."))
+#     min_region_coverage <- max_region_perc
+#   }
+#   
+#   if (min_aoi_coverage > max_aoi_perc) {
+#     warning(glue::glue("min_aoi_coverage ({min_aoi_coverage}%) exceeds all observed AOI percentages. Adjusting to {max_aoi_perc}%."))
+#     min_aoi_coverage <- max_aoi_perc
+#   }
+#   
+#   # Process drop classes and thresholding
+#   landcover_analysis_output_included <- landcover_analysis_output_raw
+#   if (!is.na(min_region_coverage)) {
+#     landcover_analysis_output_included <- landcover_analysis_output_included |> dplyr::filter(region_perc > min_region_coverage)
+#   }
+#   if (length(drop_classes) > 0 && !all(is.na(drop_classes))) {
+#     landcover_analysis_output_included <- landcover_analysis_output_included |> 
+#       dplyr::filter(!(.data[[drop_classes_column_name]] %in% drop_classes))
+#   }
+#   
+#   # Split into represented and not represented classes
+#   df_represented <- landcover_analysis_output_included |> dplyr::filter(aoi_perc > min_aoi_coverage)
+#   df_not_represented <- landcover_analysis_output_included |> dplyr::filter(aoi_perc <= min_aoi_coverage)
+#   
+#   # Compute percent not represented
+#   perc_area_not_represented <- (sum(df_not_represented$region_count) / sum(landcover_analysis_output_included$region_count)) * 100
+#   
+#   # Create filtered rasters for REP & NOT_REP cases
+#   raster_represented <- terra::classify(larger_region_cover, 
+#                                         as.matrix(df_represented[, c(cat_base_column_name, cat_base_column_name)]), 
+#                                         others = NA)
+#   
+#   raster_not_represented <- terra::classify(larger_region_cover, 
+#                                             as.matrix(df_not_represented[, c(cat_base_column_name, cat_base_column_name)]), 
+#                                             others = NA)
+#   
+#   # Save rasters
+#   raster_outputs <- list()
+#   if ("FULL" %in% out_rast_type) {
+#     raster_outputs$full <- save_rasters(larger_region_cover, landcover_analysis_output_raw, "full",
+#                                         out_dir, clean_run_name, out_rast_values, perc_digits, raster_return, cat_base_column_name)
+#   }
+#   if ("REP" %in% out_rast_type) {
+#     raster_outputs$rep <- save_rasters(raster_represented, df_represented, "rep",
+#                                        out_dir, clean_run_name, out_rast_values, perc_digits, raster_return, cat_base_column_name)
+#   }
+#   if ("NOT_REP" %in% out_rast_type) {
+#     raster_outputs$not_rep <- save_rasters(raster_not_represented, df_not_represented, "not_rep",
+#                                            out_dir, clean_run_name, out_rast_values, perc_digits, raster_return, cat_base_column_name)
+#   }
+#   
+#   return(list(analysis_name = run_name,
+#               df_raw = landcover_analysis_output_raw,
+#               df_included = landcover_analysis_output_included,
+#               df_represented = df_represented,
+#               df_not_represented = df_not_represented,
+#               perc_area_not_represented = perc_area_not_represented,
+#               rasters = if ("MEMORY" %in% raster_return) raster_outputs else NULL))
+# }
+
+
+
+
+# 
+# #out_rast_values = "BOTH", "PERC_COVER", or "RAW"
+# #out_rast_type = "BOTH", "REP", "NOT_REP", or "NONE"
+# representative_categorical_cover_analysis <- function(raster,
+#                                                       raster_cat_df,
+#                                                       region_shape,
+#                                                       aoi_shape,
+#                                                       run_name = "NotProvided",
+#                                                       cat_base_column_name, 
+#                                                       aoi_drop_perc = NA,
+#                                                       region_drop_perc = NA,
+#                                                       drop_classes = NA,
+#                                                       drop_classes_column_name = NA,
+#                                                       out_rast_values = "BOTH",
+#                                                       out_rast_type = "BOTH",
+#                                                       out_dir = "",
+#                                                       new_sub_dir = FALSE) {
+#   
+#   print(paste0("Operating on run: ", run_name))
+#   
+#   # Validate inputs
+#   if(!out_rast_values %in% c("BOTH", "PERC_COVER", "RAW")) {
+#     stop("Invalid value for 'out_rast_values'. Must be one of: 'BOTH', 'PERC_COVER', 'RAW'.")
+#   }
+#   
+#   if(!out_rast_type %in% c("BOTH", "REP", "NOT_REP", "NONE")) {
+#     stop("Invalid value for 'out_rast_values'. Must be one of: 'BOTH', 'REP', 'NOT_REP', 'NONE'.")
+#   }
+#   
+#   if(run_name == "NotProvided") {
+#     warning("You have not provided a run_name; 'NotProvided' will be used")
+#   }
+#   
+#   if(!cat_base_column_name %in% names(raster_cat_df)) {
+#     stop("cat_base_column_name must be one of the column names in raster_cat_df")
+#   }
+#   
+#   
+#   #Setup output directories
+#   clean_run_name <- run_name %>%
+#     gsub(" ", "", .) %>%
+#     gsub("/", "_", .) %>%
+#     gsub("\\.", "_", .)
+#   clean_aoi_dp <- gsub("\\.", "", as.character(aoi_drop_perc))
+#   clean_region_dp <- gsub("\\.", "", as.character(region_drop_perc))
+#   clean_run_name <- paste(clean_run_name, "_adp", clean_aoi_dp, "_rdp", clean_region_dp, sep = "")
+#   
+#   if(new_sub_dir) {
+#     out_dir <- here::here(out_dir, clean_run_name)
+#     dir_ensure(out_dir)
+#   }
+#   
+#   # Crop sub-regions for analysis
+#   print('Cropping to region')
+#   larger_region_cover <- crop_careful_universal(raster = raster, vector = region_shape, mask = TRUE, verbose = FALSE) 
+#   print(paste0('Cropping to sub-region aoi'))
+#   aoi_cover <- crop_careful_universal(raster = larger_region_cover, vector = aoi_shape, mask = TRUE, verbose = FALSE)
+#   
+#   # Analyze
+#   landcover_analysis_output_raw <- analyze_categorical_cover(aoi_raster = aoi_cover,
+#                                                              larger_region_raster = larger_region_cover,
+#                                                              raster_cat_df = raster_cat_df,
+#                                                              cat_base_column = cat_base_column_name)
+#   landcover_analysis_output_included <- landcover_analysis_output_raw
+#   
+#   
+#   
+#   # Remove any classes that are below the regional drop percentage, if specified
+#   # This is to keep data clean for rasters with many categories that are not common on the landscape
+#   if(!is.na(region_drop_perc)) {
+#     landcover_analysis_output_included <- landcover_analysis_output_included |>
+#       dplyr::filter(region_perc > region_drop_perc)
+#   }
+#   
+#   # Remove any specifically called out classes
+#   if (length(drop_classes) > 0 && !all(is.na(drop_classes))) {
+#     drop_classes_col_sym <- rlang::sym(drop_classes_column_name)
+#     landcover_analysis_output_included <- landcover_analysis_output_included |>
+#       dplyr::filter(!(.data[[drop_classes_column_name]] %in% drop_classes))
+#   }
+#   
+#   
+#   
+#   # Remove classes that are below a certain AOI percentage (i.e. that are not adequately represented within the aoi)
+#   if(!is.na(aoi_drop_perc)) {
+#     df_represented <- landcover_analysis_output_included |>
+#       dplyr::filter(aoi_perc > aoi_drop_perc)
+#     df_not_represented <- landcover_analysis_output_included |>
+#       dplyr::filter(aoi_perc <= aoi_drop_perc)
+#   }
+#   
+#   # OLD VERSION
+#   # #Get percentage of area not represented (only taking into account areas included)
+#   # perc_area_not_represented <- (sum(df_not_represented$region_count) / sum(landcover_analysis_output_included$region_count)) * 100
+#   
+#   
+#   # NEW VERSION
+#   not_rep_count <- df_not_represented |>
+#     dplyr::select(cat_base_column_name, region_count, aoi_count, region_perc, aoi_perc) |>
+#     dplyr::distinct() |>
+#     dplyr::pull(region_count) |>
+#     sum()
+#   
+#   all_count <- landcover_analysis_output_included |>
+#     dplyr::select(cat_base_column_name, region_count, aoi_count, region_perc, aoi_perc) |>
+#     dplyr::distinct() |>
+#     dplyr::pull(region_count) |>
+#     sum()
+#   
+# 
+#   perc_area_not_represented <- (not_rep_count / all_count) * 100
+#   #
+#   
+#   
+#   
+#   # Generate new raster data requested
+#   
+#   #Not represented areas
+#   if(out_rast_type == "BOTH" | out_rast_type == "NOT_REP") {
+#     print('Generating new rasters: Raster not represented')
+#     raster_not_represented <- keep_tif_values_in_df(raster = larger_region_cover, df = df_not_represented)
+#     
+#     if(out_rast_values == "RAW" | out_rast_values == "BOTH") {
+#       terra::writeRaster(raster_not_represented,
+#                          here::here(out_dir, paste0(clean_run_name, "_not_rep_raw.tif")),
+#                          overwrite = TRUE,
+#                          gdal = c("COMPRESS=DEFLATE"))
+#     }
+#     
+#     if(out_rast_values == "BOTH" | out_rast_values == "PERC_COVER") {
+#       print("Reclassifying output raster to use landscape percentage")
+#       not_rep_classify <- df_not_represented |>
+#         dplyr::select({{cat_base_column_name}}, region_perc) |>
+#         as.matrix()
+#       raster_not_represented <- raster_not_represented |>
+#         terra::classify(not_rep_classify)
+#       
+#       terra::writeRaster(raster_not_represented,
+#                          here::here(out_dir, paste0(clean_run_name, "_not_rep_perc_cover.tif")),
+#                          overwrite = TRUE,
+#                          gdal = c("COMPRESS=DEFLATE"))
+#     }
+#     
+#     rm(raster_not_represented)
+#     gc()
+#   }
+#     
+#   # represented areas
+#   if(out_rast_type == "BOTH" | out_rast_type == "REP") {
+#     
+#     print('Generating new rasters: Raster represented')
+#     raster_represented <- keep_tif_values_in_df(raster = larger_region_cover, df = df_represented)
+#     
+#     if(out_rast_values == "RAW" | out_rast_values == "BOTH") {
+#       terra::writeRaster(raster_represented,
+#                          here::here(out_dir, paste0(clean_run_name, "_rep_raw.tif")),
+#                          overwrite = TRUE,
+#                          gdal = c("COMPRESS=DEFLATE"))
+#     }
+#     
+#     if(out_rast_values == "BOTH" | out_rast_values == "PERC_COVER") {
+#       print("Reclassifying output raster to use landscape percentage")
+#       
+#       rep_classify <- df_represented |>
+#         dplyr::select({{cat_base_column_name}}, region_perc) |>
+#         as.matrix()
+#       raster_represented <- raster_represented |>
+#         terra::classify(rep_classify)
+#       
+#       terra::writeRaster(raster_represented,
+#                          here::here(out_dir, paste0(clean_run_name, "_rep_perc_cover.tif")),
+#                          overwrite = TRUE,
+#                          gdal = c("COMPRESS=DEFLATE"))
+#     }
+#     
+#     rm(raster_represented)
+#     gc()
+#   
+#   }
+#   
+#   # no rasters
+#   if(out_rast_type == "NONE") {
+#     print("You have not requested a written output raster, returning only in-memory non-spatial data")
+#   }
+#   
+#   return(list(analysis_name = run_name,
+#               df_raw = landcover_analysis_output_raw,
+#               df_included = landcover_analysis_output_included,
+#               df_represented = df_represented,
+#               df_not_represented = df_not_represented,
+#               perc_area_not_represented = perc_area_not_represented))
+# }
+
