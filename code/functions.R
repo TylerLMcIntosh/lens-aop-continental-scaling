@@ -784,6 +784,9 @@ keep_tif_values_in_df <- function(raster, df) {
 represent_graph <- function(coverage_df,
                             manual_lim = NA,
                             log = FALSE) {
+ 
+  # Representation plot
+  
   if (is.na(manual_lim)) {
     global_max <- max(coverage_df$region_perc, coverage_df$aoi_perc)
   } else {
@@ -845,6 +848,66 @@ represent_graph <- function(coverage_df,
   # }
   
   return(p)
+}
+
+
+cumulative_coverage_graph <- function(coverage_df) {
+  
+  
+  # Cumulative coverage
+  
+  #Create a cumulative coverage data frame
+  cum_df <- coverage_df |>
+    select(region_perc, diff_in_perc) |>
+    arrange(diff_in_perc, region_perc) |>
+    dplyr::mutate(cum_reg = cumsum(region_perc)) |>
+    dplyr::select(-region_perc) %>%
+    rbind(c(.[1,1], 0), .)
+  
+  # Find the index where diff_in_perc crosses from negative to positive
+  cross_index <- which(cum_df$diff_in_perc < 0 & dplyr::lead(cum_df$diff_in_perc) >= 0)
+  
+  # Extract the corresponding cum_reg value
+  if (length(cross_index) > 0) {
+    crossing_cum_reg <- cum_df$cum_reg[cross_index + 1]
+  } else {
+    print("No crossing point found.")
+  }
+  
+  # Create cumulative coverage plot
+  p_cum <- ggplot(data = cum_df) +
+    geom_step(aes(x = diff_in_perc, y = cum_reg),
+              direction = 'hv') +
+    ylim(c(0, 100)) +
+    xlab("Coverage difference (AOI overrepresent <-> AOI underrepresent)") +
+    ylab("Cumulative regional coverage") +
+    geom_hline(yintercept = crossing_cum_reg,
+               color = "red",
+               linetype = "dashed") +
+    labs(title = "Cumulative plot",
+         caption = paste0("Cumulative regional coverage over-represented in AOI: ", round(crossing_cum_reg, 1), "%")) +
+    theme_minimal()
+  
+  return(p_cum)
+  
+}
+
+represent_stats <- function(coverage_df, manual_lim = NA) {
+  
+  p_normal <- represent_graph(coverage_df,
+                              log = FALSE,
+                              #bivariate_background = TRUE,
+                              manual_lim = manual_lim)
+  p_log <- represent_graph(coverage_df,
+                           log = TRUE,
+                           #bivariate_background = TRUE,
+                           manual_lim = manual_lim)
+  p_cum <- cumulative_coverage_graph(coverage_df)
+  
+  
+  return(list(represent_plot_normal = p_normal,
+              represent_plot_log = p_log,
+              cumulative_plot = p_cum))
 }
 
 
@@ -1017,7 +1080,8 @@ bivariate_raster_viz_3 <- function(x,
                                    pals_pal = pals::brewer.seqseq2(n = 9),
                                    flip = FALSE,
                                    x_nm,
-                                   y_nm) {
+                                   y_nm,
+                                   title) {
   
   # Parameter Checks
   
@@ -1068,7 +1132,8 @@ bivariate_raster_viz_3 <- function(x,
   
   # ---- Plot the Bivariate Raster
   biv_plot <- tmap::tm_shape(bivariate_rgb) +
-    tmap::tm_rgb(r = 1, g = 2, b = 3, tm_scale_rgb(max_color_value = 255))
+    tmap::tm_rgb(r = 1, g = 2, b = 3, tm_scale_rgb(max_color_value = 255)) +
+    tmap::tm_title(text = title)
   
   # ---- Create the Legend
   bi_leg <- biscale::bi_legend(
