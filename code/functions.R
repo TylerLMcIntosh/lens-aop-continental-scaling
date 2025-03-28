@@ -3,149 +3,125 @@
 # LENS analyses ----
 
 
+full_representative_categorical_analysis <- function(...) {
+  
+  analysis <- representative_categorical_cover_analysis(...)
+  
+  nm <- analysis$params$analysis_name
+  
+  dats <- analysis$df_raw
+  write_csv(dats,
+            file = here::here(analysis$params$out_dir, paste0(nm, '_raw_dats.csv')),
+            append = FALSE)
+  
+  #Return results
+  results <- represent_stats(coverage_df = analysis$df_raw,
+                             manual_lim = NA,
+                             nm = nm)
+  
+  # Save results
+  ggsave(plot = results$plots$represent_plot_normal,
+         width = 6,
+         height = 6,
+         units = "in",
+         filename = here::here(analysis$params$out_dir, paste0(nm, '_rep_plot_normal.jpg')))
+  ggsave(plot = results$plots$represent_plot_log,
+         width = 6,
+         height = 6,
+         units = "in",
+         filename = here::here(analysis$params$out_dir, paste0(nm, '_rep_plot_log.jpg')))
+  ggsave(plot = results$plots$cumulative_plot_cov_diff,
+         width = 6,
+         height = 6,
+         units = "in",
+         filename = here::here(analysis$params$out_dir, paste0(nm, '_cumulative_plot_cov_diff.jpg')))
+  ggsave(plot = results$plots$cumulative_plot_aoi,
+         width = 6,
+         height = 6,
+         units = "in",
+         filename = here::here(analysis$params$out_dir, paste0(nm, '_cumulative_plot_aoi.jpg')))
+  
+  # Create bivariate map
+  region <- terra::rast(analysis$raster_file_names$full$PERC_COVER_REGION)
+  aoi <- terra::rast(analysis$raster_file_names$full$PERC_COVER_AOI)
+  
+  bp_norm2_log_agg <- bivariate_raster_viz_3(x = log1p(terra::aggregate(region, fact = 30, fun = "median")),
+                                             y = log1p(terra::aggregate(aoi, fact = 30, fun = "median")),
+                                             bi_normal = TRUE,
+                                             pals_pal = pals::brewer.seqseq2(n = 9),
+                                             flip = FALSE,
+                                             x_nm = "Log-transformed Region Coverage",
+                                             y_nm = "Log-transformed AOI Coverage",
+                                             title = paste0(nm, ": \nAggregated and log-transformed bivariate coverage map, bi-normalized"))
+  
+  terra::writeRaster(bp_norm2_log_agg$biv_rgb,
+                     filename = here::here(analysis$params$out_dir, 'biv_rgb.tif'))
+  tmap_save(tm = bp_norm2_log_agg$biv_plot,
+            filename = here::here(analysis$params$out_dir, paste0(nm, 'biv_norm2_log.jpg')))
+  ggsave(plot = bp_norm2_log_agg$legend,
+         filename = here::here(analysis$params$out_dir, 'biv_legend.jpg'))
+  
+  rm(analysis)
+  gc()
+  
+  return(results$stats)
+  
+}
 
 
-# A specific version of representative_categorical_cover_analysis that operates over a full set of matched
-# region and AOI polygons, exports results, creates a csv summary, and a single CONUS-wide graphic
-conus_lens_analysis <- function(region_polygons_merged,
-                                region_name_col,
-                                areas_of_interest_merged,
-                                raster,
-                                raster_cat_df,
-                                run_name = "neon_domains",
-                                cat_base_column_name,
-                                aoi_drop_perc = NA,
-                                drop_classes = NA,
-                                drop_classes_column_name = NA,
-                                out_rast_values = "PERC_COVER",
-                                out_rast_type = "NOT_REP",
-                                out_dir) {
-  
-  tic(paste("CONUS-lens-analysis run:", run_name, sep = " "))
-  
-  # Allow ease of parallel processing
-  if(is.character(raster)) {
-    raster <- terra::rast(raster)
-  }
-  
-  if(is.character(region_polygons_merged)) {
-    region_polygons_merged <- sf::st_read(region_polygons_merged)
-  }
-  
-  if(is.character(areas_of_interest_merged)) {
-    areas_of_interest_merged <- sf::st_read(areas_of_interest_merged)
-  }
+
+
+full_representative_categorical_analysis_set <- function(full_run_nm,
+                                                         dir_out,
+                                                         region_polygons_merged,
+                                                         areas_of_interest_merged,
+                                                         region_name_col,
+                                                         parallel = FALSE,
+                                                         n_workers = NA,
+                                                         raster,
+                                                         ...) {
   
   # Setup output directory for rasters
-  clean_aoi_dp <- gsub("\\.", "", as.character(aoi_drop_perc))
-  dir_out <- here::here(out_dir, paste(run_name, clean_aoi_dp, sep = "_"))
+  dir_out <- here::here(dir_out, full_run_nm)
   dir_ensure(dir_out)
   
-  #Run analysis using representative_categorical_cover_analysis function
-  all_region_results <- purrr::pmap(list(region_shape = split(region_polygons_merged, seq(nrow(region_polygons_merged))),
-                                         aoi_shape = split(areas_of_interest_merged, seq(nrow(areas_of_interest_merged))),
-                                         #run_name = paste(run_name, region_polygons_merged$DomainName, sep ="_")),
-                                        run_name = paste(run_name, region_polygons_merged[[region_name_col]], sep = "_")),
-                                    representative_categorical_cover_analysis,
-                                    raster = raster,
-                                    raster_cat_df = raster_cat_df,
-                                    cat_base_column_name = cat_base_column_name,
-                                    region_drop_perc = 0,
-                                    aoi_drop_perc = aoi_drop_perc,
-                                    drop_classes = drop_classes,
-                                    drop_classes_column_name = drop_classes_column_name,
-                                    out_rast_values = out_rast_values,
-                                    out_rast_type = out_rast_type, #out_rast_type = "BOTH", "REP", "NOT_REP", or "NONE"
-                                    out_dir = dir_out,
-                                    new_sub_dir = FALSE)
+  region_list <- split(region_polygons_merged, seq(nrow(region_polygons_merged)))
+  aoi_list <- split(areas_of_interest_merged, seq(nrow(areas_of_interest_merged)))
   
-  # Create a dataframe with all percentages and export
-  result_df <- purrr::map_dfr(all_region_results, ~ tibble(
-    region_name = .x$analysis_name,
-    perc_area_not_represented = .x$perc_area_not_represented
-  ))
-  readr::write_csv(result_df, here::here(dir_out, paste0(run_name, "_results.csv")))
-  
-  toc()
-}
-
-
-
-conus_lens_figure <- function(dir_search,
-                              pattern,
-                              overlay_polygons,
-                              name,
-                              col_grad = scico::scico("grayC"),
-                              downsample = TRUE) {
-  
-  # Read in the list of tif files to create the CONUS figure
-  tif_files <- list.files(dir_search,
-                          pattern = pattern,
-                          full.names = TRUE,
-                          recursive = TRUE,
-                          breaks = c(0,15))
-  
-  # CREATE FIGURE AND SAVE
-  tmap_options(max.raster = c(plot = 1e7, view = 1e5))
-  conus <- tigris::states(cb = TRUE) |>  # `cb = TRUE` for a simplified "cartographic boundary" version
-    dplyr::filter(!STUSPS %in% c("HI", "AK", "GU", "VI", "MP", "AS", "PR")) |>
-    sf::st_transform(crs = terra::crs(terra::rast(tif_files[1])))
-  
-  # Loop through each raster file, simplify if needed, and add to the tmap object
-  for (raster_path in tif_files) {
-    
-    # Load the raster
-    r <- stars::read_stars(raster_path,
-                           proxy = TRUE)
-    
-    if(raster_path == tif_files[1]) {
-      tm_plot <- 
-        tm_shape(overlay_polygons |>
-                   sf::st_transform(terra::crs(terra::rast(tif_files[1]))),
-                 bbox = sf::st_bbox(conus)) +
-        tm_borders(col = "gray90", lwd = 1) +
-        tm_fill(col = "gray90") +
-        tmap::tm_shape(r,
-                       bbox = sf::st_bbox(conus),
-                       downsample = downsample) +
-        tmap::tm_raster(palette = col_grad,
-                        style = "cont",
-                        breaks = breaks,
-                        legend.show = TRUE,
-                        title = "Unrepresented landscape\npercentage by class",
-                        legend.reverse = FALSE,
-                        legend.format = list(fun = function(x) paste0(x, "%")),
-                        legend.is.portrait = FALSE)
-    } else {
-      # Add the raster to the tmap object
-      tm_plot <- tm_plot +
-        tmap::tm_shape(r,
-                       bbox = sf::st_bbox(conus),
-                       downsample = downsample) +
-        tmap::tm_raster(palette = col_grad,
-                        style = "cont",
-                        breaks = breaks,
-                        legend.show = FALSE)
+  # Run analysis
+  if(parallel) {
+    future::plan(multisession, workers = n_workers)
+    if(!is.character(raster) && !inherits(raster, "PackedSpatRaster")) {
+      stop("To operate in parallel please provide 'raster' as the file path to a raster or pre-wrap your raster using terra::wrap()")
     }
+    region_list <- lapply(region_list, function(x) terra::wrap(terra::vect(x)))
+    aoi_list <- lapply(aoi_list, function(x) terra::wrap(terra::vect(x)))
+    all_region_results <- furrr::future_pmap(list(region_shape = region_list,
+                                                   aoi_shape = aoi_list,
+                                                   run_name = region_polygons_merged[[region_name_col]]),
+                                              full_representative_categorical_analysis,
+                                              out_dir = dir_out,
+                                             raster = raster,
+                                              ...)
+    future::plan(sequential)
+    
+  } else {
+    all_region_results <- purrr::pmap(list(region_shape = region_list,
+                                           aoi_shape = aoi_list,
+                                           run_name = region_polygons_merged[[region_name_col]]),
+                                      full_representative_categorical_analysis,
+                                      out_dir = dir_out,
+                                      raster = raster,
+                                      ...)
   }
   
-  # Finalize the plot layout with the legend outside
-  tm_plot <- tm_plot +
-    tm_shape(overlay_polygons) +
-    tm_borders(col = "gray20",
-               lwd = 1) +
-    tm_fill(col = NA, alpha = 0) +
-    tm_shape(neon_areas_of_interest_merged) +
-    tm_borders(col = "darkblue",
-               lwd = 1) +
-    tmap::tm_layout(legend.outside = FALSE,
-                    legend.position = c("left", "bottom"),
-                    title = name)
+  # Create a dataframe with all percentages and export
+  result_df <- dplyr::bind_rows(all_region_results)
+  readr::write_csv(result_df, here::here(dir_out, paste0(full_run_nm, "_results.csv")))
   
-  # Save the plot
-  tmap::tmap_save(tm_plot, here::here(dir_figs, paste0(name, ".jpeg")))
-  
+  return(result_df)
 }
+
 
 
 
@@ -271,12 +247,28 @@ representative_categorical_cover_analysis <- function(raster,
   
   print(paste0("Operating on run: ", run_name))
   
+  
+  # Make compatible with parallel processing
+  if(is.character(raster)) {
+    raster <- terra::rast(raster)
+  } else {
+    raster <- terra::unwrap(raster)
+  }
+  region_shape <- region_shape |> unwrap_to_sf()
+  aoi_shape <- aoi_shape |> unwrap_to_sf()
+  
+  
   # Ensure min_aoi_coverage and min_region_coverage are within valid ranges
   min_aoi_coverage <- ifelse(is.na(min_aoi_coverage) | min_aoi_coverage < 0, 0, min(min_aoi_coverage, 100))
   min_region_coverage <- ifelse(is.na(min_region_coverage) | min_region_coverage < 0, 0, min(min_region_coverage, 100))
   
   # Set up output directory
   clean_run_name <- gsub(" ", "", run_name)
+  clean_run_name <- gsub("\\\\", "_", clean_run_name)
+  clean_run_name <- gsub("/", "_", clean_run_name)
+  
+  run_name <- clean_run_name
+  
   clean_aoi_dp <- gsub("\\.", "", as.character(min_aoi_coverage))
   clean_region_dp <- gsub("\\.", "", as.character(min_region_coverage))
   clean_run_name <- paste(clean_run_name, "_aoi", clean_aoi_dp, "_region", clean_region_dp, sep = "")
@@ -286,11 +278,47 @@ representative_categorical_cover_analysis <- function(raster,
     dir_ensure(out_dir)
   }
   
+  # Ensure shape validity
+  aoi_shape <- sf::st_make_valid(aoi_shape)
+  region_shape <- sf::st_make_valid(region_shape)
+  
+  
+  # Ensure that AOI is fully contained within region
+  aoi_shape <- aoi_shape |>
+    sf::st_transform(sf::st_crs(region_shape))
+  
+  if(!sf::st_within(aoi_shape, region_shape, sparse = FALSE)) {
+
+    warning("The AOI provided is not fully contained within the region. Your AOI is being intersected.")
+
+    aoi_shape <- sf::st_intersection(region_shape, aoi_shape)
+    
+    if(!nrow(aoi_shape) >= 0) {
+      stop("There is no overlap between the provided AOI and region.")
+    }
+  }
+
+  
   # Crop to region and AOI
   print("Cropping to region")
   larger_region_cover <- crop_careful_universal(raster, region_shape, mask = TRUE)
+  
+  
+  # Drop classes
+  if (length(drop_classes) > 0 && !all(is.na(drop_classes))) {
+    drop_values <- raster_cat_df %>%
+      dplyr::filter(.data[[drop_classes_column_name]] %in% drop_classes) %>%
+      dplyr::pull(.data[[cat_base_column_name]]) |>
+      unique()
+    
+    larger_region_cover <- terra::ifel(larger_region_cover %in% drop_values, NA, larger_region_cover)
+  }
+  
   print("Cropping to AOI")
   aoi_cover <- crop_careful_universal(larger_region_cover, aoi_shape, mask = TRUE)
+  
+  
+  
   
   # Perform categorical cover analysis
   landcover_analysis_output_raw <- analyze_categorical_cover(aoi_cover, larger_region_cover, raster_cat_df, cat_base_column_name)
@@ -310,15 +338,12 @@ representative_categorical_cover_analysis <- function(raster,
     min_aoi_coverage <- max_aoi_perc
   }
   
-  # Process drop classes and thresholding
+  # Process thresholding
   landcover_analysis_output_included <- landcover_analysis_output_raw
   if (!is.na(min_region_coverage)) {
     landcover_analysis_output_included <- landcover_analysis_output_included |> dplyr::filter(region_perc > min_region_coverage)
   }
-  if (length(drop_classes) > 0 && !all(is.na(drop_classes))) {
-    landcover_analysis_output_included <- landcover_analysis_output_included |> 
-      dplyr::filter(!(.data[[drop_classes_column_name]] %in% drop_classes))
-  }
+
   
   # Split into represented and not represented classes
   df_represented <- landcover_analysis_output_included |> dplyr::filter(aoi_perc > min_aoi_coverage)
@@ -357,44 +382,25 @@ representative_categorical_cover_analysis <- function(raster,
   # Save rasters
   raster_outputs <- list()
   raster_files <- list()
-  # 
-  # if ("FULL" %in% out_rast_type) {
-  #   raster_outputs$full <- save_rasters(larger_region_cover, landcover_analysis_output_raw, "full",
-  #                                       out_dir, run_name, out_rast_values, perc_digits, raster_return,
-  #                                       cat_base_column_name)
-  #   raster_files$full <- raster_outputs$full$raster_files
-  # }
-  # if ("REP" %in% out_rast_type) {
-  #   raster_outputs$rep <- save_rasters(raster_represented, df_represented, "rep",
-  #                                      out_dir, run_name, out_rast_values, perc_digits, raster_return,
-  #                                      cat_base_column_name)
-  #   raster_files$rep <- raster_outputs$rep$raster_files
-  # }
-  # if ("NOT_REP" %in% out_rast_type) {
-  #   raster_outputs$not_rep <- save_rasters(raster_not_represented, df_not_represented, "not_rep",
-  #                                          out_dir, run_name, out_rast_values, perc_digits, raster_return,
-  #                                          cat_base_column_name)
-  #   raster_files$not_rep <- raster_outputs$not_rep$raster_files
-  # }
   
   
   if ("FULL" %in% out_rast_type) {
     result <- save_rasters(larger_region_cover, landcover_analysis_output_raw, "full",
-                           out_dir, run_name, out_rast_values, perc_digits, raster_return,
+                           out_dir, clean_run_name, out_rast_values, perc_digits, raster_return,
                            cat_base_column_name)
     raster_outputs$full <- result$raster_list
     raster_files$full <- result$raster_files
   }
   if ("REP" %in% out_rast_type) {
     result <- save_rasters(larger_region_cover, df_represented, "rep",
-                           out_dir, run_name, out_rast_values, perc_digits, raster_return,
+                           out_dir, clean_run_name, out_rast_values, perc_digits, raster_return,
                            cat_base_column_name)
     raster_outputs$rep <- result$raster_list
     raster_files$rep <- result$raster_files
   }
   if ("NOT_REP" %in% out_rast_type) {
     result <- save_rasters(larger_region_cover, df_not_represented, "not_rep",
-                           out_dir, run_name, out_rast_values, perc_digits, raster_return,
+                           out_dir, clean_run_name, out_rast_values, perc_digits, raster_return,
                            cat_base_column_name)
     raster_outputs$not_rep <- result$raster_list
     raster_files$not_rep <- result$raster_files
@@ -408,8 +414,10 @@ representative_categorical_cover_analysis <- function(raster,
                  min_region_coverage = min_region_coverage,
                  drop_classes = drop_classes,
                  drop_classes_column_name = drop_classes_column_name,
-                 perc_digits = perc_digits)
+                 perc_digits = perc_digits,
+                 out_dir = out_dir)
   
+  gc()
   
   return(list(params = params,
               df_raw = landcover_analysis_output_raw,
@@ -630,25 +638,25 @@ save_rasters <- function(raster, df, type, out_dir, run_name,
 ## Function to analyze landcover comparisons between AOI and a larger region.
 # It will return a dataframe with columns for region_cover and aoi_cover
 # both raw and in percentage of the total region and percentage of the aoi.
-# The function will join the raster categorical data to the frequencies,
-# and group the data and summarize it if desired based on a column of interest 
+# The function will join the raster categorical data to the frequencies
 #aoiCover - land cover raster for the smaller region of interest
 #regionCover - land cover raster for a region
-# group: whether to group the data or not (TRUE, FALSE) - note that if grouped, all other columns from cats will be dropped, and the output will no longer have the associated raster values
 analyze_categorical_cover <- function(aoi_raster,
                                       larger_region_raster,
                                       raster_cat_df,
-                                      cat_base_column_name,
-                                      group = FALSE,
-                                      cat_group_column_name = NA) {
+                                      cat_base_column_name
+                                      #group = FALSE,
+                                      #cat_group_column_name = NA
+                                      ) {
   
-  # THIS IS NEW #
+  # # THIS IS NEW #
   #Ensure that raster categories and active category are set correctly
   levels(aoi_raster) <- raster_cat_df
   terra::activeCat(aoi_raster) <- cat_base_column_name
   levels(larger_region_raster) <- raster_cat_df
   terra::activeCat(larger_region_raster) <- cat_base_column_name
-  # # #
+  # # # #
+  
   
   #Get frequencies & ensure that freq tables are clean
   print("Getting frequencies")
@@ -684,15 +692,15 @@ analyze_categorical_cover <- function(aoi_raster,
     dplyr::left_join(raster_cat_df, by = cat_base_column_name)
   
   
-  # Perform grouping summarization on group of choice if desired
-  if(group) {
-    cat_group_column_sym <- rlang::sym(cat_group_column_name)
-    all_freqs <- all_freqs |>
-      dplyr::group_by({{cat_group_column_sym}}) |>
-      dplyr::summarise(region_count = sum(region_count),
-                       aoi_count = sum(aoi_count)) |>
-      dplyr::ungroup()
-  }
+  # # Perform grouping summarization on group of choice if desired
+  # if(group) {
+  #   cat_group_column_sym <- rlang::sym(cat_group_column_name)
+  #   all_freqs <- all_freqs |>
+  #     dplyr::group_by({{cat_group_column_sym}}) |>
+  #     dplyr::summarise(region_count = sum(region_count),
+  #                      aoi_count = sum(aoi_count)) |>
+  #     dplyr::ungroup()
+  # }
   
   
   # Add percentages and differences for analysis
@@ -732,60 +740,10 @@ keep_tif_values_in_df <- function(raster, df) {
 
 
 
-#' Represent Graph of Coverage Comparison
-#'
-#' This function generates a scatter plot comparing regional coverage percentages
-#' (`region_perc`) and area of interest (AOI) coverage percentages (`aoi_perc`).
-#' It also calculates and displays absolute differences, including mean and median
-#' values across different coverage thresholds.
-#'
-#' @param coverage_df A data frame containing columns `region_perc`, `aoi_perc`, 
-#'   and `diff_in_perc`, where `region_perc` and `aoi_perc` represent coverage
-#'   percentages, and `diff_in_perc` represents their difference.
-#' @param manual_lim Optional numeric value to manually set the axis limits. If `NA` (default),
-#'   the global maximum of `region_perc` and `aoi_perc` is used.
-#' @param log Logical, whether to apply a pseudo-logarithmic scale to the axes. Default is `FALSE`.
-#'
-#' @return A `ggplot2` object representing the scatter plot.
-#'
-#' @details
-#' - The plot includes a 45-degree reference line (`y = x`) in red to indicate perfect agreement.
-#' - A caption summarizes mean and median absolute differences for all data points, as well
-#'   as subsets with `region_perc` greater than 1% and 5%.
-#' - If `log = TRUE`, a pseudo-logarithmic scale is applied to both axes.
-#'
-#' @importFrom dplyr filter pull
-#' @importFrom ggplot2 ggplot geom_point geom_abline theme_minimal labs
-#' @importFrom scales pseudo_log_trans
-#'
-#' @examples
-#' \dontrun{
-#' library(ggplot2)
-#' library(dplyr)
-#' 
-#' # Example data frame
-#' coverage_df <- data.frame(
-#'   region_perc = runif(100, 0, 100),
-#'   aoi_perc = runif(100, 0, 100),
-#'   diff_in_perc = runif(100, -10, 10)
-#' )
-#'
-#' # Default plot
-#' represent_graph(coverage_df)
-#'
-#' # Log scale plot
-#' represent_graph(coverage_df, log = TRUE)
-#'
-#' # Custom axis limit
-#' represent_graph(coverage_df, manual_lim = 50)
-#' }
-#'
-#' @export
+# Updated represent_graph
 represent_graph <- function(coverage_df,
                             manual_lim = NA,
                             log = FALSE) {
- 
-  # Representation plot
   
   if (is.na(manual_lim)) {
     global_max <- max(coverage_df$region_perc, coverage_df$aoi_perc)
@@ -793,30 +751,22 @@ represent_graph <- function(coverage_df,
     global_max <- manual_lim
   }
   
-  # Calculate perpendicular residuals to the 45-degree line
   coverage_df$diff_in_perc_abs <- abs(coverage_df$diff_in_perc)
   mean_diff <- mean(coverage_df$diff_in_perc_abs, na.rm = TRUE)
   median_diff <- median(coverage_df$diff_in_perc_abs, na.rm = TRUE)
   
-  mean_diff_over_1_perc <- mean(coverage_df |>
-                                  dplyr::filter(region_perc > 1) |>
-                                  dplyr::pull(diff_in_perc_abs), na.rm = TRUE)
-  median_diff_over_1_perc <- median(coverage_df |>
-                                      dplyr::filter(region_perc > 1) |>
-                                      dplyr::pull(diff_in_perc_abs), na.rm = TRUE)
+  mean_diff_over_1_perc <- mean(dplyr::filter(coverage_df, region_perc > 1)$diff_in_perc_abs, na.rm = TRUE)
+  median_diff_over_1_perc <- median(dplyr::filter(coverage_df, region_perc > 1)$diff_in_perc_abs, na.rm = TRUE)
   
-  mean_diff_over_5_perc <- mean(coverage_df |>
-                                  dplyr::filter(region_perc > 5) |>
-                                  dplyr::pull(diff_in_perc_abs), na.rm = TRUE)
-  median_diff_over_5_perc <- median(coverage_df |>
-                                      dplyr::filter(region_perc > 5) |>
-                                      dplyr::pull(diff_in_perc_abs), na.rm = TRUE)
+  mean_diff_over_5_perc <- mean(dplyr::filter(coverage_df, region_perc > 5)$diff_in_perc_abs, na.rm = TRUE)
+  median_diff_over_5_perc <- median(dplyr::filter(coverage_df, region_perc > 5)$diff_in_perc_abs, na.rm = TRUE)
   
-  # Construct the caption text
-  caption_text <- sprintf("All classes: Mean Abs. Difference: %.2f | Median Abs. Difference: %.2f\nAll classes with >1%% regional coverage: Mean Abs. Difference: %.2f | Median Abs. Difference: %.2f\nAll classes with >5%% regional coverage: Mean Abs. Difference: %.2f | Median Abs. Difference: %.2f",
-                          mean_diff, median_diff, 
-                          mean_diff_over_1_perc, median_diff_over_1_perc,
-                          mean_diff_over_5_perc, median_diff_over_5_perc)
+  caption_text <- sprintf(
+    "All classes: Mean Abs. Difference: %.2f | Median Abs. Difference: %.2f\nAll classes with >1%% regional coverage: Mean Abs. Difference: %.2f | Median Abs. Difference: %.2f\nAll classes with >5%% regional coverage: Mean Abs. Difference: %.2f | Median Abs. Difference: %.2f",
+    mean_diff, median_diff,
+    mean_diff_over_1_perc, median_diff_over_1_perc,
+    mean_diff_over_5_perc, median_diff_over_5_perc
+  )
   
   p <- ggplot(data = coverage_df) +
     geom_point(aes(x = region_perc, y = aoi_perc)) +
@@ -826,10 +776,8 @@ represent_graph <- function(coverage_df,
   
   if (log) {
     p <- p +
-      scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
-                         limits = c(0, global_max)) +
-      scale_x_continuous(trans = scales::pseudo_log_trans(base = 10),
-                         limits = c(0, global_max)) +
+      scale_y_continuous(trans = scales::pseudo_log_trans(base = 10), limits = c(0, global_max)) +
+      scale_x_continuous(trans = scales::pseudo_log_trans(base = 10), limits = c(0, global_max)) +
       xlab("Regional Coverage Percentage (log scale)") +
       ylab("Area of Interest Coverage Percentage (log scale)")
   } else {
@@ -840,75 +788,504 @@ represent_graph <- function(coverage_df,
       ylab("Area of Interest Coverage Percentage")
   }
   
-  # if(bivariate_background) {
-  #
-  #   p <- p +
-  #     annotate("rect", xmin=10, xmax=15, ymin=0, ymax=Inf, alpha=0.1, fill="gold")
-  #
-  # }
+  stats <- data.frame(
+    mean_diff = mean_diff,
+    median_diff = median_diff,
+    mean_diff_classes_over_1_perc_reg = mean_diff_over_1_perc,
+    median_diff_classes_over_1_perc_reg = median_diff_over_1_perc,
+    mean_diff_classes_over_5_perc_reg = mean_diff_over_5_perc,
+    median_diff_classes_over_5_perc_reg = median_diff_over_5_perc
+  )
   
-  return(p)
+  return(list(plot = p, stats = stats))
 }
 
-
-cumulative_coverage_graph <- function(coverage_df) {
+cumulative_coverage_graph_by_cov_diff <- function(coverage_df) {
   
-  
-  # Cumulative coverage
-  
-  #Create a cumulative coverage data frame
   cum_df <- coverage_df |>
-    select(region_perc, diff_in_perc) |>
+    dplyr::select(region_perc, diff_in_perc) |>
     arrange(diff_in_perc, region_perc) |>
     dplyr::mutate(cum_reg = cumsum(region_perc)) |>
-    dplyr::select(-region_perc) %>%
-    rbind(c(.[1,1], 0), .)
+    dplyr::select(diff_in_perc, cum_reg)
+  
+  # Prepend a starting row with cum_reg = 0
+  first_row <- cum_df[1, , drop = FALSE]
+  first_row$cum_reg <- 0
+  cum_df <- rbind(first_row, cum_df)
   
   # Find the index where diff_in_perc crosses from negative to positive
   cross_index <- which(cum_df$diff_in_perc < 0 & dplyr::lead(cum_df$diff_in_perc) >= 0)
   
-  # Extract the corresponding cum_reg value
-  if (length(cross_index) > 0) {
-    crossing_cum_reg <- cum_df$cum_reg[cross_index + 1]
-  } else {
-    print("No crossing point found.")
-  }
+  crossing_cum_reg <- if (length(cross_index) > 0) cum_df$cum_reg[cross_index + 1] else NA_real_
   
-  # Create cumulative coverage plot
-  p_cum <- ggplot(data = cum_df) +
-    geom_step(aes(x = diff_in_perc, y = cum_reg),
-              direction = 'hv') +
+  p <- ggplot(data = cum_df) +
+    geom_step(aes(x = diff_in_perc, y = cum_reg), direction = 'hv') +
     ylim(c(0, 100)) +
     xlab("Coverage difference (AOI overrepresent <-> AOI underrepresent)") +
     ylab("Cumulative regional coverage") +
-    geom_hline(yintercept = crossing_cum_reg,
-               color = "red",
-               linetype = "dashed") +
-    labs(title = "Cumulative plot",
-         caption = paste0("Cumulative regional coverage over-represented in AOI: ", round(crossing_cum_reg, 1), "%")) +
+    geom_hline(yintercept = crossing_cum_reg, color = "red", linetype = "dashed") +
+    labs(
+      title = "Cumulative plot",
+      caption = paste0("Cumulative regional coverage over-represented in AOI: ", round(crossing_cum_reg, 1), "%")
+    ) +
     theme_minimal()
   
-  return(p_cum)
-  
+  stats <- data.frame(regional_coverage_aoi_overrep = crossing_cum_reg)
+  return(list(plot = p, stats = stats))
 }
 
-represent_stats <- function(coverage_df, manual_lim = NA) {
+cumulative_coverage_graph_by_aoi_cover <- function(coverage_df) {
   
-  p_normal <- represent_graph(coverage_df,
-                              log = FALSE,
-                              #bivariate_background = TRUE,
-                              manual_lim = manual_lim)
-  p_log <- represent_graph(coverage_df,
-                           log = TRUE,
-                           #bivariate_background = TRUE,
-                           manual_lim = manual_lim)
-  p_cum <- cumulative_coverage_graph(coverage_df)
+  cum_df <- coverage_df |>
+    dplyr::select(region_perc, aoi_perc) |>
+    arrange(desc(aoi_perc), region_perc) |>
+    dplyr::mutate(cum_reg = cumsum(region_perc)) |>
+    dplyr::select(aoi_perc, cum_reg)
   
+  # Prepend a starting row with cum_reg = 0
+  first_row <- cum_df[1, , drop = FALSE]
+  first_row$cum_reg <- 0
+  cum_df <- rbind(first_row, cum_df)
   
-  return(list(represent_plot_normal = p_normal,
-              represent_plot_log = p_log,
-              cumulative_plot = p_cum))
+  thresholds <- c(10, 1, 0.1, 0.01, 0.001)
+  cols <- RColorBrewer::brewer.pal(length(thresholds) + 4, "Reds")[4:(length(thresholds)+3)]
+  
+  t_covs <- numeric(length(thresholds))
+  for (i in seq_along(thresholds)) {
+    ind <- which(cum_df$aoi_perc >= thresholds[i] & dplyr::lead(cum_df$aoi_perc) < thresholds[i])
+    t_covs[i] <- if (length(ind) > 0) cum_df$cum_reg[ind] else NA
+  }
+  
+  caption_text <- "Cumulative regional coverage from classes with >X% AOI coverage:"
+  p <- ggplot(data = cum_df) +
+    geom_step(aes(x = aoi_perc, y = cum_reg), direction = 'hv') +
+    ylim(c(0, 100)) +
+    xlab("AOI Coverage") +
+    ylab("Cumulative regional coverage") +
+    labs(title = "Regional Cumulative Cover by AOI Coverage") +
+    theme_minimal() +
+    scale_x_reverse()
+  
+  for (i in seq_along(thresholds)) {
+    p <- p +
+      geom_hline(yintercept = t_covs[i], color = cols[i], linetype = "dashed")
+    caption_text <- paste0(
+      caption_text,
+      "<br> <span style='color:", cols[i], ";'> >", thresholds[i],
+      "% AOI coverage: ", round(t_covs[i], 1), "% </span>"
+    )
+  }
+  
+  p <- p +
+    labs(caption = caption_text) +
+    theme(plot.caption = ggtext::element_markdown())
+  
+  stats <- as.data.frame(t(t_covs))
+  names(stats) <- paste0("aoi_over_", thresholds, "_perc_reg_cov")
+  
+  return(list(plot = p, stats = stats))
 }
+
+
+# Updated represent_stats
+represent_stats <- function(coverage_df,
+                            manual_lim = NA,
+                            nm = NA) {
+  
+  g1 <- represent_graph(coverage_df, log = FALSE, manual_lim = manual_lim)
+  g2 <- represent_graph(coverage_df, log = TRUE, manual_lim = manual_lim)
+  g3 <- cumulative_coverage_graph_by_cov_diff(coverage_df)
+  g4 <- cumulative_coverage_graph_by_aoi_cover(coverage_df)
+  
+  plots <- list(
+    represent_plot_normal = g1$plot,
+    represent_plot_log = g2$plot,
+    cumulative_plot_cov_diff = g3$plot,
+    cumulative_plot_aoi = g4$plot
+  )
+  
+  stats <- dplyr::bind_cols(
+    data.frame(area_name = nm),
+    g1$stats,
+    #g2$stats,
+    g3$stats,
+    g4$stats
+  )
+  
+  return(list(
+    plots = plots,
+    stats = stats
+  ))
+}
+
+
+#' Reclassify Raster Based on Groupings
+#'
+#' Reclassifies a categorical raster using a grouping defined in a data frame.
+#' The original categories are mapped to new group values based on the specified
+#' columns. Optionally writes the result to disk.
+#'
+#' @param raster A `SpatRaster` object from the **terra** package to be reclassified.
+#' @param raster_cat_df A data frame with mapping between raster values and grouping variables.
+#' @param value_column The name of the column in `raster_cat_df` corresponding to the original raster values.
+#' @param group_column The name of the column in `raster_cat_df` to which the raster values will be grouped.
+#' @param write_to_disk Logical; if `TRUE`, writes the reclassified raster to disk.
+#' @param out_path Character; the file path where the raster should be written if `write_to_disk = TRUE`.
+#' @param overwrite Logical; if `TRUE`, overwrites existing files at `out_path`.
+#'
+#' @return A list with two elements:
+#'   - If `write_to_disk = FALSE`: a list with `raster` (the reclassified `SpatRaster`) and `cat_df` (mapping of new values to group labels).
+#'   - If `write_to_disk = TRUE`: a list with `raster_path` (path to the saved raster) and `cat_df` (mapping of new values to group labels).
+#'
+#' @importFrom terra classify activeCat levels
+#' @importFrom dplyr mutate rename select left_join distinct %>%
+#' @importFrom tibble tibble
+#' @importFrom glue glue
+#'
+#' @export
+reclassify_raster_by_group <- function(raster,
+                                       raster_cat_df,
+                                       value_column,
+                                       group_column,
+                                       write_to_disk = FALSE,
+                                       out_path = NULL,
+                                       overwrite = TRUE) {
+  # --- Validate inputs ---
+  if (!inherits(raster, "SpatRaster")) {
+    stop("`raster` must be a terra::SpatRaster object.")
+  }
+  
+  if (!is.data.frame(raster_cat_df)) {
+    stop("`raster_cat_df` must be a data.frame.")
+  }
+  
+  if (!(value_column %in% names(raster_cat_df))) {
+    stop(glue::glue("Column '{value_column}' not found in raster_cat_df."))
+  }
+  
+  if (!(group_column %in% names(raster_cat_df))) {
+    stop(glue::glue("Column '{group_column}' not found in raster_cat_df."))
+  }
+  
+  # --- Prepare columns ---
+  raster_cat_df <- raster_cat_df %>%
+    dplyr::mutate(
+      value_col = as.numeric(.data[[value_column]]),
+      group_col = as.factor(.data[[group_column]])
+    )
+  
+  group_levels <- levels(raster_cat_df$group_col)
+  group_ids <- seq_along(group_levels)
+  
+  # Decide on output datatype
+  if (write_to_disk) {
+    datatype <- if (length(group_ids) <= 255) {
+      message("Writing raster as INT1U (0–255)...")
+      "INT1U"
+    } else {
+      message("Writing raster as INT2S (−32,768 to 32,767)...")
+      "INT2S"
+    }
+  }
+  
+  # Create group mapping
+  group_map <- tibble::tibble(
+    VALUE = group_ids,
+    GROUP = group_levels
+  ) %>%
+    dplyr::rename(!!group_column := GROUP)
+  
+  # Build reclass matrix
+  mapping_df <- raster_cat_df %>%
+    dplyr::select(value_col, group_col) %>%
+    dplyr::left_join(group_map, by = c("group_col" = group_column)) %>%
+    dplyr::distinct(value_col, VALUE)
+  
+  reclass_matrix <- as.matrix(mapping_df)
+  
+  if (nrow(reclass_matrix) == 0) {
+    stop("No valid mappings found after filtering.")
+  }
+  
+  # --- Reclassify raster in memory ---
+  classified <- terra::classify(raster, rcl = reclass_matrix, others = NA)
+  
+  # --- Set category levels ---
+  new_cat_df <- group_map %>%
+    dplyr::mutate(VALUE = as.integer(VALUE)) %>%
+    dplyr::select(VALUE, !!group_column)
+  
+  levels(classified) <- new_cat_df
+  terra::activeCat(classified) <- group_column
+  
+  # --- Write to disk or return in memory ---
+  if (write_to_disk) {
+    if (is.null(out_path)) {
+      stop("`out_path` must be provided when `write_to_disk = TRUE`.")
+    }
+    
+    terra::writeRaster(
+      x = classified,
+      filename = out_path,
+      overwrite = overwrite,
+      datatype = datatype,
+      gdal = c("COMPRESS=DEFLATE")
+    )
+    
+    return(list(
+      raster_path = out_path,
+      cat_df = new_cat_df
+    ))
+  } else {
+    return(list(
+      raster = classified,
+      cat_df = new_cat_df
+    ))
+  }
+}
+
+
+
+
+#' #' Represent Graph of Coverage Comparison
+#' #'
+#' #' This function generates a scatter plot comparing regional coverage percentages
+#' #' (`region_perc`) and area of interest (AOI) coverage percentages (`aoi_perc`).
+#' #' It also calculates and displays absolute differences, including mean and median
+#' #' values across different coverage thresholds.
+#' #'
+#' #' @param coverage_df A data frame containing columns `region_perc`, `aoi_perc`, 
+#' #'   and `diff_in_perc`, where `region_perc` and `aoi_perc` represent coverage
+#' #'   percentages, and `diff_in_perc` represents their difference.
+#' #' @param manual_lim Optional numeric value to manually set the axis limits. If `NA` (default),
+#' #'   the global maximum of `region_perc` and `aoi_perc` is used.
+#' #' @param log Logical, whether to apply a pseudo-logarithmic scale to the axes. Default is `FALSE`.
+#' #'
+#' #' @return A `ggplot2` object representing the scatter plot.
+#' #'
+#' #' @details
+#' #' - The plot includes a 45-degree reference line (`y = x`) in red to indicate perfect agreement.
+#' #' - A caption summarizes mean and median absolute differences for all data points, as well
+#' #'   as subsets with `region_perc` greater than 1% and 5%.
+#' #' - If `log = TRUE`, a pseudo-logarithmic scale is applied to both axes.
+#' #'
+#' #' @importFrom dplyr filter pull
+#' #' @importFrom ggplot2 ggplot geom_point geom_abline theme_minimal labs
+#' #' @importFrom scales pseudo_log_trans
+#' #'
+#' #' @examples
+#' #' \dontrun{
+#' #' library(ggplot2)
+#' #' library(dplyr)
+#' #' 
+#' #' # Example data frame
+#' #' coverage_df <- data.frame(
+#' #'   region_perc = runif(100, 0, 100),
+#' #'   aoi_perc = runif(100, 0, 100),
+#' #'   diff_in_perc = runif(100, -10, 10)
+#' #' )
+#' #'
+#' #' # Default plot
+#' #' represent_graph(coverage_df)
+#' #'
+#' #' # Log scale plot
+#' #' represent_graph(coverage_df, log = TRUE)
+#' #'
+#' #' # Custom axis limit
+#' #' represent_graph(coverage_df, manual_lim = 50)
+#' #' }
+#' #'
+#' #' @export
+#' represent_graph <- function(coverage_df,
+#'                             manual_lim = NA,
+#'                             log = FALSE) {
+#'  
+#'   # Representation plot
+#'   
+#'   if (is.na(manual_lim)) {
+#'     global_max <- max(coverage_df$region_perc, coverage_df$aoi_perc)
+#'   } else {
+#'     global_max <- manual_lim
+#'   }
+#'   
+#'   # Calculate perpendicular residuals to the 45-degree line
+#'   coverage_df$diff_in_perc_abs <- abs(coverage_df$diff_in_perc)
+#'   mean_diff <- mean(coverage_df$diff_in_perc_abs, na.rm = TRUE)
+#'   median_diff <- median(coverage_df$diff_in_perc_abs, na.rm = TRUE)
+#'   
+#'   mean_diff_over_1_perc <- mean(coverage_df |>
+#'                                   dplyr::filter(region_perc > 1) |>
+#'                                   dplyr::pull(diff_in_perc_abs), na.rm = TRUE)
+#'   median_diff_over_1_perc <- median(coverage_df |>
+#'                                       dplyr::filter(region_perc > 1) |>
+#'                                       dplyr::pull(diff_in_perc_abs), na.rm = TRUE)
+#'   
+#'   mean_diff_over_5_perc <- mean(coverage_df |>
+#'                                   dplyr::filter(region_perc > 5) |>
+#'                                   dplyr::pull(diff_in_perc_abs), na.rm = TRUE)
+#'   median_diff_over_5_perc <- median(coverage_df |>
+#'                                       dplyr::filter(region_perc > 5) |>
+#'                                       dplyr::pull(diff_in_perc_abs), na.rm = TRUE)
+#'   
+#'   # Construct the caption text
+#'   caption_text <- sprintf("All classes: Mean Abs. Difference: %.2f | Median Abs. Difference: %.2f\nAll classes with >1%% regional coverage: Mean Abs. Difference: %.2f | Median Abs. Difference: %.2f\nAll classes with >5%% regional coverage: Mean Abs. Difference: %.2f | Median Abs. Difference: %.2f",
+#'                           mean_diff, median_diff, 
+#'                           mean_diff_over_1_perc, median_diff_over_1_perc,
+#'                           mean_diff_over_5_perc, median_diff_over_5_perc)
+#'   
+#'   p <- ggplot(data = coverage_df) +
+#'     geom_point(aes(x = region_perc, y = aoi_perc)) +
+#'     geom_abline(slope = 1, intercept = 0, color = "red", lty = 2) +
+#'     theme_minimal() +
+#'     labs(caption = caption_text)
+#'   
+#'   if (log) {
+#'     p <- p +
+#'       scale_y_continuous(trans = scales::pseudo_log_trans(base = 10),
+#'                          limits = c(0, global_max)) +
+#'       scale_x_continuous(trans = scales::pseudo_log_trans(base = 10),
+#'                          limits = c(0, global_max)) +
+#'       xlab("Regional Coverage Percentage (log scale)") +
+#'       ylab("Area of Interest Coverage Percentage (log scale)")
+#'   } else {
+#'     p <- p +
+#'       scale_y_continuous(limits = c(0, global_max)) +
+#'       scale_x_continuous(limits = c(0, global_max)) +
+#'       xlab("Regional Coverage Percentage") +
+#'       ylab("Area of Interest Coverage Percentage")
+#'   }
+#'   
+#'   # if(bivariate_background) {
+#'   #
+#'   #   p <- p +
+#'   #     annotate("rect", xmin=10, xmax=15, ymin=0, ymax=Inf, alpha=0.1, fill="gold")
+#'   #
+#'   # }
+#'   
+#'   return(p)
+#' }
+#' 
+#' 
+#' cumulative_coverage_graph_by_cov_diff <- function(coverage_df) {
+#'   
+#'   # Cumulative coverage
+#'   
+#'   #Create a cumulative coverage data frame
+#'   cum_df <- coverage_df |>
+#'     select(region_perc, diff_in_perc) |>
+#'     arrange(diff_in_perc, region_perc) |>
+#'     dplyr::mutate(cum_reg = cumsum(region_perc)) |>
+#'     dplyr::select(-region_perc) %>%
+#'     rbind(c(.[1,1], 0), .)
+#'   
+#'   # Find the index where diff_in_perc crosses from negative to positive
+#'   cross_index <- which(cum_df$diff_in_perc < 0 & dplyr::lead(cum_df$diff_in_perc) >= 0)
+#'   
+#'   # Extract the corresponding cum_reg value
+#'   if (length(cross_index) > 0) {
+#'     crossing_cum_reg <- cum_df$cum_reg[cross_index + 1]
+#'   } else {
+#'     print("No crossing point found.")
+#'   }
+#'   
+#'   # Create cumulative coverage plot
+#'   p_cum <- ggplot(data = cum_df) +
+#'     geom_step(aes(x = diff_in_perc, y = cum_reg),
+#'               direction = 'hv') +
+#'     ylim(c(0, 100)) +
+#'     xlab("Coverage difference (AOI overrepresent <-> AOI underrepresent)") +
+#'     ylab("Cumulative regional coverage") +
+#'     geom_hline(yintercept = crossing_cum_reg,
+#'                color = "red",
+#'                linetype = "dashed") +
+#'     labs(title = "Cumulative plot",
+#'          caption = paste0("Cumulative regional coverage over-represented in AOI: ", round(crossing_cum_reg, 1), "%")) +
+#'     theme_minimal()
+#'   
+#'   return(p_cum)
+#'   
+#' }
+#' 
+#' 
+#' cumulative_coverage_graph_by_aoi_cover <- function(coverage_df) {
+#'   
+#'   # Cumulative coverage
+#'   
+#'   #Create a cumulative coverage data frame
+#'   cum_df <- coverage_df |>
+#'     select(region_perc, aoi_perc) |>
+#'     arrange(desc(aoi_perc), region_perc) |>
+#'     dplyr::mutate(cum_reg = cumsum(region_perc)) |>
+#'     dplyr::select(-region_perc) %>%
+#'     rbind(c(.[1,1], 0), .)
+#'   
+#'   thresholds <- c(10, 1, 0.1, 0.01, 0.001)
+#'   cols <- RColorBrewer::brewer.pal(length(thresholds) + 4, "Reds")
+#'   cols <- cols[4:length(cols)]
+#' 
+#'   
+#'   t_covs <- c()
+#'   for(t in thresholds) {
+#'     ind <- which(cum_df$aoi_perc >= t & dplyr::lead(cum_df$aoi_perc) < t)
+#'     if (length(ind) > 0) {
+#'       i_reg_cov <- cum_df$cum_reg[ind]
+#'     } else {
+#'       i_reg_cov <- NA
+#'     }
+#'     t_covs <- append(t_covs, i_reg_cov)
+#'   }
+#'   
+#'   # Create cumulative coverage plot
+#'   p_cum <- ggplot(data = cum_df) +
+#'     geom_step(aes(x = aoi_perc, y = cum_reg),
+#'               direction = 'hv') +
+#'     ylim(c(0, 100)) +
+#'     xlab("AOI Coverage") +
+#'     ylab("Cumulative regional coverage") +
+#'     labs(title = "Regional Cumulative Cover by AOI Coverage") +
+#'     theme_minimal() +
+#'     scale_x_reverse()
+#'   
+#'   caption_text <- "Cumulative regional coverage from classes with >X% AOI coverage:"
+#'   for(i in 1:length(thresholds)) {
+#'     p_cum <- p_cum +
+#'       geom_hline(yintercept = t_covs[i],
+#'                  color = cols[i],
+#'                  linetype = "dashed")
+#'     
+#'     #caption_text = paste0(caption_text, "\n >", thresholds[i], "% AOI coverage: ", round(t_covs[i], 1), "%")
+#'     caption_text = paste0(caption_text, "<br> <span style='color:", cols[i], ";'> >", thresholds[i], "% AOI coverage: ", round(t_covs[i], 1), "% </span>")
+#'     
+#'   }
+#'   
+#'   p_cum <- p_cum +
+#'     labs(caption = caption_text) +
+#'     theme(plot.caption = element_markdown())
+#'   
+#'   return(p_cum)
+#' }
+#' 
+#' 
+#' represent_stats <- function(coverage_df, manual_lim = NA) {
+#'   
+#'   p_normal <- represent_graph(coverage_df,
+#'                               log = FALSE,
+#'                               #bivariate_background = TRUE,
+#'                               manual_lim = manual_lim)
+#'   p_log <- represent_graph(coverage_df,
+#'                            log = TRUE,
+#'                            #bivariate_background = TRUE,
+#'                            manual_lim = manual_lim)
+#'   p_cum <- cumulative_coverage_graph_by_cov_diff(coverage_df)
+#'   
+#'   p_cum_aoi <- cumulative_coverage_graph_by_aoi_cover(coverage_df)
+#'   
+#'   
+#'   return(list(represent_plot_normal = p_normal,
+#'               represent_plot_log = p_log,
+#'               cumulative_plot_cov_diff = p_cum,
+#'               cumulative_plot_aoi = p_cum_aoi))
+#' }
 
 
 # Bivariate raster mapping ----
@@ -1133,7 +1510,8 @@ bivariate_raster_viz_3 <- function(x,
   # ---- Plot the Bivariate Raster
   biv_plot <- tmap::tm_shape(bivariate_rgb) +
     tmap::tm_rgb(r = 1, g = 2, b = 3, tm_scale_rgb(max_color_value = 255)) +
-    tmap::tm_title(text = title)
+    tmap::tm_title(text = title) +
+    tmap::tm_layout(frame = FALSE)
   
   # ---- Create the Legend
   bi_leg <- biscale::bi_legend(
@@ -1146,6 +1524,7 @@ bivariate_raster_viz_3 <- function(x,
   
   # ---- Return Plot and Legend
   return(list(
+    biv_rgb = bivariate_rgb,
     biv_plot = biv_plot,
     legend = bi_leg
   ))
@@ -3079,5 +3458,16 @@ access_data_get_x_from_arcgis_rest_api_geojson <- function(base_url, query_param
   }
   
   return(all_data_sf)
+}
+
+
+unwrap_to_sf <- function(obj) {
+  if (inherits(obj, "PackedSpatVector")) {
+    obj <- terra::unwrap(obj)
+  }
+  if (inherits(obj, "SpatVector")) {
+    obj <- sf::st_as_sf(obj)
+  }
+  return(obj)
 }
 

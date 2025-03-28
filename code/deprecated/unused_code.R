@@ -1171,3 +1171,364 @@
 #               perc_area_not_represented = perc_area_not_represented))
 # }
 
+
+### Old function calls ----
+
+
+## NEON domains analyses ----
+# 
+# # Run analysis with AOI threshold of 0.001% - 1% and all EVT classes
+# future::plan(multisession, workers = 4)
+# tic()
+# furrr::future_map2(.x = aoi_thresholds,
+#              .y = c("neon_domains_evt_raw_all_0001",
+#                     "neon_domains_evt_raw_all_001",
+#                     "neon_domains_evt_raw_all_01",
+#                     "neon_domains_evt_raw_all_1"),
+#              .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged_file,
+#                                                      areas_of_interest_merged = neon_areas_of_interest_merged_file,
+#                                                      region_name_col = "DomainName",
+#                                                      raster = evt_conus_file,
+#                                                      raster_cat_df = raster_cats,
+#                                                      run_name = y,
+#                                                      cat_base_column_name = "VALUE",
+#                                                      aoi_drop_perc = x,
+#                                                      drop_classes = NA,
+#                                                      drop_classes_column_name = NA,
+#                                                      out_rast_values = "BOTH",
+#                                                      out_rast_type = "BOTH",
+#                                                      out_dir = here::here('data/derived/')))
+# toc()
+# 
+# 
+# # Run analysis with AOI threshold of 0.001% - 1% and all EVT classes except ag_dev_mine
+# tic()
+# purrr::walk2(.x = aoi_thresholds,
+#              .y = c("neon_domains_evt_raw_no_ag_dev_mine_0001",
+#                     "neon_domains_evt_raw_no_ag_dev_mine_001",
+#                     "neon_domains_evt_raw_no_ag_dev_mine_01",
+#                     "neon_domains_evt_raw_no_ag_dev_mine_1"),
+#              .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged,
+#                                                      areas_of_interest_merged = neon_areas_of_interest_merged,
+#                                                      region_name_col = "DomainName",
+#                                                      raster = raster,
+#                                                      raster_cat_df = raster_cats,
+#                                                      run_name = y,
+#                                                      cat_base_column_name = "VALUE",
+#                                                      aoi_drop_perc = x,
+#                                                      drop_classes = ag_dev_mine_evt_names,
+#                                                      drop_classes_column_name = "EVT_NAME",
+#                                                      out_rast_values = "BOTH",
+#                                                      out_rast_type = "BOTH",
+#                                                      out_dir = here::here('data/derived/')))
+# toc()
+# 
+# 
+# # Run analysis with AOI threshold of 0.001% - 1% and all EVT groups
+# tic()
+# purrr::walk2(.x = aoi_thresholds,
+#              .y = c("neon_domains_evt_groups_all_0001",
+#                     "neon_domains_evt_groups_all_001",
+#                     "neon_domains_evt_groups_all_01",
+#                     "neon_domains_evt_groups_all_1"),
+#              .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged[1,],
+#                                                      areas_of_interest_merged = neon_areas_of_interest_merged[1,],
+#                                                      region_name_col = "DomainName",
+#                                                      raster = raster,
+#                                                      raster_cat_df = raster_cats,
+#                                                      run_name = y,
+#                                                      cat_base_column_name = "EVT_GP",
+#                                                      aoi_drop_perc = x,
+#                                                      drop_classes = NA,
+#                                                      drop_classes_column_name = NA,
+#                                                      out_rast_values = "PERC_COVER",
+#                                                      out_rast_type = "NOT_REP",
+#                                                      out_dir = here::here('data/derived/')))
+# toc()
+# 
+# 
+# 
+# # Run analysis with AOI threshold of 0.001% - 1% and EVT groups except ag_dev_mine
+# tic()
+# purrr::walk2(.x = aoi_thresholds,
+#              .y = c("neon_domains_evt_groups_no_ag_dev_mine_0001",
+#                     "neon_domains_evt_groups_no_ag_dev_mine_001",
+#                     "neon_domains_evt_groups_no_ag_dev_mine_01",
+#                     "neon_domains_evt_groups_no_ag_dev_mine_1"),
+#              .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged,
+#                                                      areas_of_interest_merged = neon_areas_of_interest_merged,
+#                                                      region_name_col = "DomainName",
+#                                                      raster = raster,
+#                                                      raster_cat_df = raster_cats,
+#                                                      run_name = y,
+#                                                      cat_base_column_name = "EVT_GP",
+#                                                      aoi_drop_perc = x,
+#                                                      drop_classes = ag_dev_mine_evt_names,
+#                                                      drop_classes_column_name = "EVT_NAME",
+#                                                      out_rast_values = "BOTH",
+#                                                      out_rast_type = "BOTH",
+#                                                      out_dir = here::here('data/derived/')))
+# toc()
+# 
+# 
+# ## CONUS analyses ----
+# 
+# tic()
+# purrr::walk2(.x = aoi_thresholds,
+#              .y = c("conus_evt_raw_all_0001",
+#                     "conus_evt_raw_all_001",
+#                     "conus_evt_raw_all_01",
+#                     "conus_evt_raw_all_1"),
+#              .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged,
+#                                                      areas_of_interest_merged = neon_areas_of_interest_merged,
+#                                                      region_name_col = "DomainName",
+#                                                      raster = raster,
+#                                                      raster_cat_df = raster_cats,
+#                                                      run_name = y,
+#                                                      cat_base_column_name = "VALUE",
+#                                                      aoi_drop_perc = x,
+#                                                      drop_classes = NA,
+#                                                      drop_classes_column_name = NA,
+#                                                      out_rast_values = "BOTH",
+#                                                      out_rast_type = "BOTH",
+#                                                      out_dir = here::here('data/derived/')))
+# toc()
+# 
+# tic()
+# purrr::walk2(.x = aoi_thresholds,
+#              .y = c("conus_evt_groups_all_0001",
+#                     "conus_evt_groups_all_001",
+#                     "conus_evt_groups_all_01",
+#                     "conus_evt_groups_all_1"),
+#              .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged,
+#                                                      areas_of_interest_merged = neon_areas_of_interest_merged,
+#                                                      raster = raster,
+#                                                      raster_cat_df = raster_cats,
+#                                                      run_name = y,
+#                                                      cat_base_column_name = "EVT_GP",
+#                                                      aoi_drop_perc = x,
+#                                                      drop_classes = NA,
+#                                                      drop_classes_column_name = NA,
+#                                                      out_rast_values = "BOTH",
+#                                                      out_rast_type = "BOTH",
+#                                                      out_dir = here::here('data/derived/')))
+# toc()
+# 
+# 
+# 
+
+# Testing bivariate mapping function calls ----
+# # USE FUNCTIONS
+# region <- terra::rast(t$raster_file_names$full$PERC_COVER_REGION)
+# aoi <- terra::rast(t$raster_file_names$full$PERC_COVER_AOI)
+# 
+# 
+# # 
+# # tic()
+# # bp_norm2_agg <- bivariate_raster_viz_3(x = terra::aggregate(region, fact = 30, fun = "median"),
+# #                                        y = terra::aggregate(aoi, fact = 30, fun = "median"),
+# #                                        bi_normal = TRUE,
+# #                                        pals_pal = pals::brewer.seqseq2(n = 9),
+# #                                        flip = FALSE,
+# #                                        x_nm = "Region Coverage",
+# #                                        y_nm = "AOI Coverage",
+# #                                        title = "Aggregated bivariate coverage map, bi-normalized")
+# # toc()
+# # 
+# # 
+# # tic()
+# # bp_norm1_agg <- bivariate_raster_viz_3(x = terra::aggregate(region, fact = 30, fun = "median"),
+# #                              y = terra::aggregate(aoi, fact = 30, fun = "median"),
+# #                              bi_normal = FALSE,
+# #                              pals_pal = pals::brewer.seqseq2(n = 9),
+# #                              flip = FALSE,
+# #                              x_nm = "Region Coverage",
+# #                              y_nm = "AOI Coverage",
+# #                              title = "Aggregated bivariate coverage map, uni-normalized")
+# # toc()
+# 
+# 
+# tic()
+# bp_norm2_log_agg <- bivariate_raster_viz_3(x = log1p(terra::aggregate(region, fact = 30, fun = "median")),
+#                              y = log1p(terra::aggregate(aoi, fact = 30, fun = "median")),
+#                              bi_normal = TRUE,
+#                              pals_pal = pals::brewer.seqseq2(n = 9),
+#                              flip = FALSE,
+#                              x_nm = "Log-transformed Region Coverage",
+#                              y_nm = "Log-transformed AOI Coverage",
+#                              title = "Aggregated and log-transformed bivariate coverage map, bi-normalized")
+# toc()
+# 
+# 
+# 
+# tic()
+# bp_norm1_log_agg <- bivariate_raster_viz_3(x = log1p(terra::aggregate(region, fact = 30, fun = "median")),
+#                              y = log1p(terra::aggregate(aoi, fact = 30, fun = "median")),
+#                              bi_normal = FALSE,
+#                              pals_pal = pals::brewer.seqseq2(n = 9),
+#                              flip = FALSE,
+#                              x_nm = "Log-transformed Region Coverage",
+#                              y_nm = "Log-transformed AOI Coverage",
+#                              title = "Aggregated and log-transformed bivariate coverage map, uni-normalized")
+# toc()
+# 
+# 
+# 
+# ggsave(plot = bp_norm1_agg$legend,
+#        filename = here::here("data/derived/TEST_NorthernRockies_aoi0_region0/biv_legend.jpg"))
+# tmap_save(tm = bp_norm2_agg$biv_plot,
+#           filename = here::here("data/derived/TEST_NorthernRockies_aoi0_region0/biv_norm2.jpg"))
+# tmap_save(tm = bp_norm1_agg$biv_plot,
+#           filename = here::here("data/derived/TEST_NorthernRockies_aoi0_region0/biv_norm1.jpg"))
+# tmap_save(tm = bp_norm2_log_agg$biv_plot,
+#           filename = here::here("data/derived/TEST_NorthernRockies_aoi0_region0/biv_norm2_log.jpg"))
+# tmap_save(tm = bp_norm1_log_agg$biv_plot,
+#           filename = here::here("data/derived/TEST_NorthernRockies_aoi0_region0/biv_norm1_log.jpg"))
+# 
+
+
+# OLD LENS FUNCTIONS ----
+
+
+
+# A specific version of representative_categorical_cover_analysis that operates over a full set of matched
+# region and AOI polygons, exports results, creates a csv summary, and a single CONUS-wide graphic
+conus_lens_analysis <- function(region_polygons_merged,
+                                region_name_col,
+                                areas_of_interest_merged,
+                                raster,
+                                raster_cat_df,
+                                run_name = "neon_domains",
+                                cat_base_column_name,
+                                aoi_drop_perc = NA,
+                                drop_classes = NA,
+                                drop_classes_column_name = NA,
+                                out_rast_values = "PERC_COVER",
+                                out_rast_type = "NOT_REP",
+                                out_dir) {
+  
+  tic(paste("CONUS-lens-analysis run:", run_name, sep = " "))
+  
+  # Allow ease of parallel processing
+  if(is.character(raster)) {
+    raster <- terra::rast(raster)
+  }
+  
+  if(is.character(region_polygons_merged)) {
+    region_polygons_merged <- sf::st_read(region_polygons_merged)
+  }
+  
+  if(is.character(areas_of_interest_merged)) {
+    areas_of_interest_merged <- sf::st_read(areas_of_interest_merged)
+  }
+  
+  # Setup output directory for rasters
+  clean_aoi_dp <- gsub("\\.", "", as.character(aoi_drop_perc))
+  dir_out <- here::here(out_dir, paste(run_name, clean_aoi_dp, sep = "_"))
+  dir_ensure(dir_out)
+  
+  #Run analysis using representative_categorical_cover_analysis function
+  all_region_results <- purrr::pmap(list(region_shape = split(region_polygons_merged, seq(nrow(region_polygons_merged))),
+                                         aoi_shape = split(areas_of_interest_merged, seq(nrow(areas_of_interest_merged))),
+                                         #run_name = paste(run_name, region_polygons_merged$DomainName, sep ="_")),
+                                         run_name = paste(run_name, region_polygons_merged[[region_name_col]], sep = "_")),
+                                    representative_categorical_cover_analysis,
+                                    raster = raster,
+                                    raster_cat_df = raster_cat_df,
+                                    cat_base_column_name = cat_base_column_name,
+                                    region_drop_perc = 0,
+                                    aoi_drop_perc = aoi_drop_perc,
+                                    drop_classes = drop_classes,
+                                    drop_classes_column_name = drop_classes_column_name,
+                                    out_rast_values = out_rast_values,
+                                    out_rast_type = out_rast_type, #out_rast_type = "BOTH", "REP", "NOT_REP", or "NONE"
+                                    out_dir = dir_out,
+                                    new_sub_dir = FALSE)
+  
+  # Create a dataframe with all percentages and export
+  result_df <- purrr::map_dfr(all_region_results, ~ tibble(
+    region_name = .x$analysis_name,
+    perc_area_not_represented = .x$perc_area_not_represented
+  ))
+  readr::write_csv(result_df, here::here(dir_out, paste0(run_name, "_results.csv")))
+  
+  toc()
+}
+
+
+
+conus_lens_figure <- function(dir_search,
+                              pattern,
+                              overlay_polygons,
+                              name,
+                              col_grad = scico::scico("grayC"),
+                              downsample = TRUE) {
+  
+  # Read in the list of tif files to create the CONUS figure
+  tif_files <- list.files(dir_search,
+                          pattern = pattern,
+                          full.names = TRUE,
+                          recursive = TRUE,
+                          breaks = c(0,15))
+  
+  # CREATE FIGURE AND SAVE
+  tmap_options(max.raster = c(plot = 1e7, view = 1e5))
+  conus <- tigris::states(cb = TRUE) |>  # `cb = TRUE` for a simplified "cartographic boundary" version
+    dplyr::filter(!STUSPS %in% c("HI", "AK", "GU", "VI", "MP", "AS", "PR")) |>
+    sf::st_transform(crs = terra::crs(terra::rast(tif_files[1])))
+  
+  # Loop through each raster file, simplify if needed, and add to the tmap object
+  for (raster_path in tif_files) {
+    
+    # Load the raster
+    r <- stars::read_stars(raster_path,
+                           proxy = TRUE)
+    
+    if(raster_path == tif_files[1]) {
+      tm_plot <- 
+        tm_shape(overlay_polygons |>
+                   sf::st_transform(terra::crs(terra::rast(tif_files[1]))),
+                 bbox = sf::st_bbox(conus)) +
+        tm_borders(col = "gray90", lwd = 1) +
+        tm_fill(col = "gray90") +
+        tmap::tm_shape(r,
+                       bbox = sf::st_bbox(conus),
+                       downsample = downsample) +
+        tmap::tm_raster(palette = col_grad,
+                        style = "cont",
+                        breaks = breaks,
+                        legend.show = TRUE,
+                        title = "Unrepresented landscape\npercentage by class",
+                        legend.reverse = FALSE,
+                        legend.format = list(fun = function(x) paste0(x, "%")),
+                        legend.is.portrait = FALSE)
+    } else {
+      # Add the raster to the tmap object
+      tm_plot <- tm_plot +
+        tmap::tm_shape(r,
+                       bbox = sf::st_bbox(conus),
+                       downsample = downsample) +
+        tmap::tm_raster(palette = col_grad,
+                        style = "cont",
+                        breaks = breaks,
+                        legend.show = FALSE)
+    }
+  }
+  
+  # Finalize the plot layout with the legend outside
+  tm_plot <- tm_plot +
+    tm_shape(overlay_polygons) +
+    tm_borders(col = "gray20",
+               lwd = 1) +
+    tm_fill(col = NA, alpha = 0) +
+    tm_shape(neon_areas_of_interest_merged) +
+    tm_borders(col = "darkblue",
+               lwd = 1) +
+    tmap::tm_layout(legend.outside = FALSE,
+                    legend.position = c("left", "bottom"),
+                    title = name)
+  
+  # Save the plot
+  tmap::tmap_save(tm_plot, here::here(dir_figs, paste0(name, ".jpeg")))
+  
+}

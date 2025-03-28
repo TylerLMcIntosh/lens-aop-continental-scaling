@@ -35,20 +35,23 @@ install_and_load_packages(
     "furrr",
     "pals",
     "biscale",
+    "RColorBrewer",
+    "ggtext",
+    "patchwork",
     "grid"),
   auto_install = "y"
 )
 
-# ## Cyverse data store access if applicable ----
-# # Copy previous data over from data store if on cyverse and project has been run before
-# if(cyverse) {
-#   if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data")) {
-#     system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data ~/lens-aop-continental-scaling/")
-#   }
-#   if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/figs")) {
-#     system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/figs ~/lens-aop-continental-scaling/")
-#   }
-# }
+## Cyverse data store access if applicable ----
+# Copy previous data over from data store if on cyverse and project has been run before
+if(cyverse) {
+  if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data")) {
+    system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data ~/lens-aop-continental-scaling/")
+  }
+  if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/figs")) {
+    system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/figs ~/lens-aop-continental-scaling/")
+  }
+}
 
 
 # Set up necessary data directories
@@ -79,6 +82,26 @@ epa_region_polygons <- access_data_epa_l2_ecoregions_api() |>
   sf::st_transform(sf::st_crs(neon_region_polygons))
 areas_of_interest <- access_neon_aop_flight_box_data() #note that flight boxes have the domain data as "D##" instead of just "##"
 
+# Create a grouped version of the raster
+r_grp_fl <- here::here('data/derived/lfr_grouped.tif')
+r_grp_cat_fl <- here::here('data/derived/lfr_grouped_cats.csv')
+if(!file.exists(r_grp_fl)) {
+  r_grp <- reclassify_raster_by_group(
+    raster = raster,
+    raster_cat_df = raster_cats,
+    value_column = "VALUE",
+    group_column = "EVT_GP_N",
+    write_to_disk = TRUE,
+    out_path = r_grp_fl
+  )
+  readr::write_csv(r_grp$cat_df,
+                   r_grp_cat_fl)
+}
+
+raster_grouped <- terra::rast(r_grp_fl)
+raster_cats_grouped <- readr::read_csv(r_grp_cat_fl)
+
+
 # Get CONUS bounds to spatial subset
 conus <- tigris::states() |>
   dplyr::filter(!STUSPS %in% c("AK", "HI", "PR", "VI", "MP", "GU", "AS")) |>
@@ -94,8 +117,12 @@ areas_of_interest <- areas_of_interest |>
 # MANUALLY CREATE TEST POLYGONS IF DESIRED
 install_and_load_packages(c("mapedit"))
 
-test <- mapedit::drawFeatures()
-test <- test |>
+test_rgn <- mapedit::drawFeatures()
+test_rgn <- test_rgn |>
+  sf::st_transform(sf::st_crs(neon_region_polygons))
+
+test_aoi <- mapedit::drawFeatures()
+test_aoi <- test_aoi |>
   sf::st_transform(sf::st_crs(neon_region_polygons))
 
 
@@ -169,14 +196,14 @@ sf::st_write(epa_areas_of_interest_merged, epa_areas_of_interest_merged_file, ap
 
 
 ## Prep to run analyses ----
-aoi_thresholds <- c(0.001, 0.01, 0.1, 1)
-
-ag_dev_mine_evt_names <- raster_cats |> dplyr::filter(
-  grepl(pattern = "Developed", x = EVT_PHYS, ignore.case = FALSE) |
-    grepl(pattern = "Agricultural", x = EVT_PHYS, ignore.case = FALSE) |
-    grepl(pattern = "Quarries", x = EVT_PHYS, ignore.case = FALSE)) |>
-  dplyr::pull(EVT_NAME) |>
-  as.vector()
+# aoi_thresholds <- c(0.001, 0.01, 0.1, 1)
+# 
+# ag_dev_mine_evt_names <- raster_cats |> dplyr::filter(
+#   grepl(pattern = "Developed", x = EVT_PHYS, ignore.case = FALSE) |
+#     grepl(pattern = "Agricultural", x = EVT_PHYS, ignore.case = FALSE) |
+#     grepl(pattern = "Quarries", x = EVT_PHYS, ignore.case = FALSE)) |>
+#   dplyr::pull(EVT_NAME) |>
+#   as.vector()
 
 #For conus analyses
 
@@ -204,148 +231,91 @@ conus_aoi <- areas_of_interest |>
   dplyr::ungroup()
 
 
-## NEON domains analyses ----
 
-# Run analysis with AOI threshold of 0.001% - 1% and all EVT classes
-future::plan(multisession, workers = 4)
+
+
+
+# NEON REGIONS
 tic()
-furrr::future_map2(.x = aoi_thresholds,
-             .y = c("neon_domains_evt_raw_all_0001",
-                    "neon_domains_evt_raw_all_001",
-                    "neon_domains_evt_raw_all_01",
-                    "neon_domains_evt_raw_all_1"),
-             .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged_file,
-                                                     areas_of_interest_merged = neon_areas_of_interest_merged_file,
-                                                     region_name_col = "DomainName",
-                                                     raster = evt_conus_file,
-                                                     raster_cat_df = raster_cats,
-                                                     run_name = y,
-                                                     cat_base_column_name = "VALUE",
-                                                     aoi_drop_perc = x,
-                                                     drop_classes = NA,
-                                                     drop_classes_column_name = NA,
-                                                     out_rast_values = "BOTH",
-                                                     out_rast_type = "BOTH",
-                                                     out_dir = here::here('data/derived/')))
-toc()
-
-
-# Run analysis with AOI threshold of 0.001% - 1% and all EVT classes except ag_dev_mine
-tic()
-purrr::walk2(.x = aoi_thresholds,
-             .y = c("neon_domains_evt_raw_no_ag_dev_mine_0001",
-                    "neon_domains_evt_raw_no_ag_dev_mine_001",
-                    "neon_domains_evt_raw_no_ag_dev_mine_01",
-                    "neon_domains_evt_raw_no_ag_dev_mine_1"),
-             .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged,
-                                                     areas_of_interest_merged = neon_areas_of_interest_merged,
-                                                     region_name_col = "DomainName",
-                                                     raster = raster,
-                                                     raster_cat_df = raster_cats,
-                                                     run_name = y,
-                                                     cat_base_column_name = "VALUE",
-                                                     aoi_drop_perc = x,
-                                                     drop_classes = ag_dev_mine_evt_names,
-                                                     drop_classes_column_name = "EVT_NAME",
-                                                     out_rast_values = "BOTH",
-                                                     out_rast_type = "BOTH",
-                                                     out_dir = here::here('data/derived/')))
-toc()
-
-
-# Run analysis with AOI threshold of 0.001% - 1% and all EVT groups
-tic()
-purrr::walk2(.x = aoi_thresholds,
-             .y = c("neon_domains_evt_groups_all_0001",
-                    "neon_domains_evt_groups_all_001",
-                    "neon_domains_evt_groups_all_01",
-                    "neon_domains_evt_groups_all_1"),
-             .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged[1,],
-                                                     areas_of_interest_merged = neon_areas_of_interest_merged[1,],
-                                                     region_name_col = "DomainName",
-                                                     raster = raster,
-                                                     raster_cat_df = raster_cats,
-                                                     run_name = y,
-                                                     cat_base_column_name = "EVT_GP",
-                                                     aoi_drop_perc = x,
-                                                     drop_classes = NA,
-                                                     drop_classes_column_name = NA,
-                                                     out_rast_values = "PERC_COVER",
-                                                     out_rast_type = "NOT_REP",
-                                                     out_dir = here::here('data/derived/')))
-toc()
-
-
-
-# Run analysis with AOI threshold of 0.001% - 1% and EVT groups except ag_dev_mine
-tic()
-purrr::walk2(.x = aoi_thresholds,
-             .y = c("neon_domains_evt_groups_no_ag_dev_mine_0001",
-                    "neon_domains_evt_groups_no_ag_dev_mine_001",
-                    "neon_domains_evt_groups_no_ag_dev_mine_01",
-                    "neon_domains_evt_groups_no_ag_dev_mine_1"),
-             .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged,
-                                                     areas_of_interest_merged = neon_areas_of_interest_merged,
-                                                     region_name_col = "DomainName",
-                                                     raster = raster,
-                                                     raster_cat_df = raster_cats,
-                                                     run_name = y,
-                                                     cat_base_column_name = "EVT_GP",
-                                                     aoi_drop_perc = x,
-                                                     drop_classes = ag_dev_mine_evt_names,
-                                                     drop_classes_column_name = "EVT_NAME",
-                                                     out_rast_values = "BOTH",
-                                                     out_rast_type = "BOTH",
-                                                     out_dir = here::here('data/derived/')))
-toc()
-
-
-## CONUS analyses ----
-
-tic()
-purrr::walk2(.x = aoi_thresholds,
-             .y = c("conus_evt_raw_all_0001",
-                    "conus_evt_raw_all_001",
-                    "conus_evt_raw_all_01",
-                    "conus_evt_raw_all_1"),
-             .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged,
-                                                     areas_of_interest_merged = neon_areas_of_interest_merged,
-                                                     region_name_col = "DomainName",
-                                                     raster = raster,
-                                                     raster_cat_df = raster_cats,
-                                                     run_name = y,
-                                                     cat_base_column_name = "VALUE",
-                                                     aoi_drop_perc = x,
-                                                     drop_classes = NA,
-                                                     drop_classes_column_name = NA,
-                                                     out_rast_values = "BOTH",
-                                                     out_rast_type = "BOTH",
-                                                     out_dir = here::here('data/derived/')))
+test_full <- full_representative_categorical_analysis_set(full_run_nm = "FULL_TEST",
+                                                          dir_out = here::here("data/derived"),
+                                                          region_polygons_merged = neon_region_polygons_merged[],
+                                                          areas_of_interest_merged = neon_areas_of_interest_merged[],
+                                                          region_name_col = "DomainName",
+                                                          raster = raster,
+                                                          raster_cat_df = raster_cats,
+                                                          cat_base_column_name = "VALUE",
+                                                          out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
+                                                          out_rast_type = c("FULL"),
+                                                          new_sub_dir = TRUE,
+                                                          min_aoi_coverage = NA,
+                                                          min_region_coverage = NA,
+                                                          drop_classes = c("Open Water"),
+                                                          drop_classes_column_name = "EVT_NAME",
+                                                          perc_digits = 2,
+                                                          raster_return = c("WRITE"))
 toc()
 
 tic()
-purrr::walk2(.x = aoi_thresholds,
-             .y = c("conus_evt_groups_all_0001",
-                    "conus_evt_groups_all_001",
-                    "conus_evt_groups_all_01",
-                    "conus_evt_groups_all_1"),
-             .f = function(x, y) conus_lens_analysis(region_polygons_merged = neon_region_polygons_merged,
-                                                     areas_of_interest_merged = neon_areas_of_interest_merged,
-                                                     raster = raster,
-                                                     raster_cat_df = raster_cats,
-                                                     run_name = y,
-                                                     cat_base_column_name = "EVT_GP",
-                                                     aoi_drop_perc = x,
-                                                     drop_classes = NA,
-                                                     drop_classes_column_name = NA,
-                                                     out_rast_values = "BOTH",
-                                                     out_rast_type = "BOTH",
-                                                     out_dir = here::here('data/derived/')))
+test_full <- full_representative_categorical_analysis_set(full_run_nm = "FULL_TEST_GROUPED",
+                                                          dir_out = here::here("data/derived"),
+                                                          region_polygons_merged = neon_region_polygons_merged[],
+                                                          areas_of_interest_merged = neon_areas_of_interest_merged[],
+                                                          region_name_col = "DomainName",
+                                                          raster = raster_grouped,
+                                                          raster_cat_df = raster_cats_grouped,
+                                                          cat_base_column_name = "VALUE",
+                                                          out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
+                                                          out_rast_type = c("FULL"),
+                                                          new_sub_dir = TRUE,
+                                                          min_aoi_coverage = NA,
+                                                          min_region_coverage = NA,
+                                                          drop_classes = c("Open Water"),
+                                                          drop_classes_column_name = "EVT_GP_N",
+                                                          perc_digits = 2,
+                                                          raster_return = c("WRITE"))
 toc()
 
 
+# CONUS
 
+tic()
+test_full <- full_representative_categorical_analysis(raster = raster,
+                                                      raster_cat_df = raster_cats,
+                                                      region_shape = conus_epa_clean,
+                                                      aoi_shape = conus_aoi,
+                                                      run_name = "CONUS",
+                                                      cat_base_column_name = "VALUE",
+                                                      out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
+                                                      out_rast_type = c("FULL"),
+                                                      out_dir = here::here("data/derived"),
+                                                      new_sub_dir = TRUE,
+                                                      min_aoi_coverage = NA,
+                                                      min_region_coverage = NA,
+                                                      drop_classes = c("Open Water"),
+                                                      drop_classes_column_name = "EVT_NAME",
+                                                      perc_digits = 2,
+                                                      raster_return = c("WRITE"))
+toc()
 
+tic()
+test_full <- full_representative_categorical_analysis(raster = raster_grouped,
+                                                      raster_cat_df = raster_cats_grouped,
+                                                      region_shape = conus_epa_clean,
+                                                      aoi_shape = conus_aoi,
+                                                      run_name = "CONUS_GP",
+                                                      cat_base_column_name = "VALUE",
+                                                      out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
+                                                      out_rast_type = c("FULL"),
+                                                      out_dir = here::here("data/derived"),
+                                                      new_sub_dir = TRUE,
+                                                      min_aoi_coverage = NA,
+                                                      min_region_coverage = NA,
+                                                      drop_classes = c("Open Water"),
+                                                      drop_classes_column_name = "EVT_GP_N",
+                                                      perc_digits = 2,
+                                                      raster_return = c("WRITE"))
+toc()
 
 
 
@@ -368,209 +338,69 @@ if(cyverse) {
 
 
 
-
-
-
-
-
-
-
-
-
-# TESTING
-
-
-
-
-
-
-
-
-
-t <- representative_categorical_cover_analysis(raster = raster,
-                                               raster_cat_df = raster_cats,
-                                               region_shape = test,
-                                               aoi_shape = areas_of_interest |> dplyr::filter(siteID == "NIWO"),
-                                               run_name = "TUESDAY_CRUISDAY2",
-                                               cat_base_column_name = "VALUE",
-                                               out_rast_values = c("RAW", "PERC_COVER_AOI", "PERC_COVER_REGION"),
-                                               out_rast_type = c("REP", "NOT_REP", "FULL"),
-                                               out_dir = here::here("data/derived"),
-                                               new_sub_dir = TRUE,
-                                               min_aoi_coverage = NA,
-                                               min_region_coverage = NA,
-                                               drop_classes = NA,
-                                               drop_classes_column_name = NA,
-                                               perc_digits = 2,
-                                               raster_return = c("WRITE", "MEMORY"))
-
-t_gp <- representative_categorical_cover_analysis(raster = raster,
-                                               raster_cat_df = raster_cats,
-                                               region_shape = test,
-                                               aoi_shape = areas_of_interest |> dplyr::filter(siteID == "NIWO"),
-                                               run_name = "TUESDAY_CRUISDAY2",
-                                               cat_base_column_name = "EVT_GP",
-                                               out_rast_values = c("RAW", "PERC_COVER_AOI", "PERC_COVER_REGION"),
-                                               out_rast_type = c("REP", "NOT_REP", "FULL"),
-                                               out_dir = here::here("data/derived"),
-                                               new_sub_dir = TRUE,
-                                               min_aoi_coverage = NA,
-                                               min_region_coverage = NA,
-                                               drop_classes = NA,
-                                               drop_classes_column_name = NA,
-                                               perc_digits = 2,
-                                               raster_return = c("WRITE", "MEMORY"))
-
-
-
-x <- t$df_raw
-gp <- t_gp$df_raw
-
-
-
-
-
-
-
-t <- representative_categorical_cover_analysis(raster = raster,
-                                               raster_cat_df = raster_cats,
-                                               region_shape = neon_region_polygons_merged[11,],
-                                               aoi_shape = neon_areas_of_interest_merged[11,],
-                                               run_name = "TEST_NorthernRockies_GP",
-                                               cat_base_column_name = "VALUE",
-                                               out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
-                                               out_rast_type = c("FULL"),
-                                               out_dir = here::here("data/derived"),
-                                               new_sub_dir = TRUE,
-                                               min_aoi_coverage = NA,
-                                               min_region_coverage = NA,
-                                               drop_classes = NA,
-                                               drop_classes_column_name = NA,
-                                               perc_digits = 2,
-                                               raster_return = c("WRITE"))
-
-
-
+# 
+# 
 # tic()
-# t <- representative_categorical_cover_analysis(raster = raster,
-#                                                raster_cat_df = raster_cats,
-#                                                region_shape = conus_epa_clean,
-#                                                aoi_shape = conus_aoi,
-#                                                run_name = "TEST_CONUS",
-#                                                cat_base_column_name = "VALUE",
-#                                                out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
-#                                                out_rast_type = c("FULL"),
-#                                                out_dir = here::here("data/derived"),
-#                                                new_sub_dir = TRUE,
-#                                                min_aoi_coverage = NA,
-#                                                min_region_coverage = NA,
-#                                                drop_classes = NA,
-#                                                drop_classes_column_name = NA,
-#                                                perc_digits = 2,
-#                                                raster_return = c("WRITE"))
+# test_full <- full_representative_categorical_analysis(raster = raster,
+#                                                       raster_cat_df = raster_cats,
+#                                                       region_shape = test_rgn,
+#                                                       aoi_shape = test_aoi,
+#                                                       run_name = "test_raw",
+#                                                       cat_base_column_name = "VALUE",
+#                                                       out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
+#                                                       out_rast_type = c("FULL"),
+#                                                       out_dir = here::here("data/derived"),
+#                                                       new_sub_dir = TRUE,
+#                                                       min_aoi_coverage = NA,
+#                                                       min_region_coverage = NA,
+#                                                       drop_classes = NA,
+#                                                       drop_classes_column_name = NA,
+#                                                       perc_digits = 2,
+#                                                       raster_return = c("WRITE"))
+# toc()
+# 
+# 
+# 
+# tic()
+# test_full <- full_representative_categorical_analysis(raster = raster_grouped,
+#                                                       raster_cat_df = raster_cats_grouped,
+#                                                       region_shape = test_rgn,
+#                                                       aoi_shape = test_aoi,
+#                                                       run_name = "test_gp",
+#                                                       cat_base_column_name = "VALUE",
+#                                                       out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
+#                                                       out_rast_type = c("FULL"),
+#                                                       out_dir = here::here("data/derived"),
+#                                                       new_sub_dir = TRUE,
+#                                                       min_aoi_coverage = NA,
+#                                                       min_region_coverage = NA,
+#                                                       drop_classes = NA,
+#                                                       drop_classes_column_name = NA,
+#                                                       perc_digits = 2,
+#                                                       raster_return = c("WRITE"))
 # toc()
 
 
 
-# REPRESENT GRAPHS
-
-
-results <- represent_stats(coverage_df = t$df_raw,
-                           manual_lim = NA)
-
-
-ggsave(plot = results$represent_plot_normal,
-       width = 6,
-       height = 6,
-       units = "in",
-       filename = here::here('data/derived/TEST_NorthernRockies_aoi0_region0/rep_plot_normal.jpg'))
-ggsave(plot = results$represent_plot_log,
-       width = 6,
-       height = 6,
-       units = "in",
-      filename = here::here('data/derived/TEST_NorthernRockies_aoi0_region0/rep_plot_log.jpg'))
-ggsave(plot = results$cumulative_plot,
-       width = 6,
-       height = 6,
-       units = "in",
-       filename = here::here('data/derived/TEST_NorthernRockies_aoi0_region0/cumulative_plot.jpg'))
-
-
-
-
-
-
-# USE FUNCTIONS
-region <- terra::rast(t$raster_file_names$full$PERC_COVER_REGION)
-aoi <- terra::rast(t$raster_file_names$full$PERC_COVER_AOI)
-
-# region <- t$rasters$full$PERC_COVER_REGION
-# aoi <- t$rasters$full$PERC_COVER_AOI
-
 tic()
-bp_norm2_agg <- bivariate_raster_viz_3(x = terra::aggregate(region, fact = 30, fun = "median"),
-                                       y = terra::aggregate(aoi, fact = 30, fun = "median"),
-                                       bi_normal = TRUE,
-                                       pals_pal = pals::brewer.seqseq2(n = 9),
-                                       flip = FALSE,
-                                       x_nm = "Region Coverage",
-                                       y_nm = "AOI Coverage",
-                                       title = "Aggregated bivariate coverage map, bi-normalized")
+test_full <- full_representative_categorical_analysis_set(full_run_nm = "p_test",
+                                                          dir_out = here::here("data/derived"),
+                                                          region_polygons_merged = neon_region_polygons_merged[1:2,],
+                                                          areas_of_interest_merged = neon_areas_of_interest_merged[1:2,],
+                                                          region_name_col = "DomainName",
+                                                          parallel = TRUE,
+                                                          n_workers = 2,
+                                                          raster = terra::wrap(raster),
+                                                          raster_cat_df = raster_cats,
+                                                          cat_base_column_name = "VALUE",
+                                                          out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
+                                                          out_rast_type = c("FULL"),
+                                                          new_sub_dir = TRUE,
+                                                          min_aoi_coverage = NA,
+                                                          min_region_coverage = NA,
+                                                          drop_classes = c("Open Water"),
+                                                          drop_classes_column_name = "EVT_NAME",
+                                                          perc_digits = 2,
+                                                          raster_return = c("WRITE"))
 toc()
-
-
-tic()
-bp_norm1_agg <- bivariate_raster_viz_3(x = terra::aggregate(region, fact = 30, fun = "median"),
-                             y = terra::aggregate(aoi, fact = 30, fun = "median"),
-                             bi_normal = FALSE,
-                             pals_pal = pals::brewer.seqseq2(n = 9),
-                             flip = FALSE,
-                             x_nm = "Region Coverage",
-                             y_nm = "AOI Coverage",
-                             title = "Aggregated bivariate coverage map, uni-normalized")
-toc()
-
-
-tic()
-bp_norm2_log_agg <- bivariate_raster_viz_3(x = log1p(terra::aggregate(region, fact = 30, fun = "median")),
-                             y = log1p(terra::aggregate(aoi, fact = 30, fun = "median")),
-                             bi_normal = TRUE,
-                             pals_pal = pals::brewer.seqseq2(n = 9),
-                             flip = FALSE,
-                             x_nm = "Log-transformed Region Coverage",
-                             y_nm = "Log-transformed AOI Coverage",
-                             title = "Aggregated and log-transformed bivariate coverage map, bi-normalized")
-toc()
-
-
-
-tic()
-bp_norm1_log_agg <- bivariate_raster_viz_3(x = log1p(terra::aggregate(region, fact = 30, fun = "median")),
-                             y = log1p(terra::aggregate(aoi, fact = 30, fun = "median")),
-                             bi_normal = FALSE,
-                             pals_pal = pals::brewer.seqseq2(n = 9),
-                             flip = FALSE,
-                             x_nm = "Log-transformed Region Coverage",
-                             y_nm = "Log-transformed AOI Coverage",
-                             title = "Aggregated and log-transformed bivariate coverage map, uni-normalized")
-toc()
-
-
-
-ggsave(plot = bp_norm1_agg$legend,
-       filename = here::here("data/derived/TEST_NorthernRockies_aoi0_region0/biv_legend.jpg"))
-tmap_save(tm = bp_norm2_agg$biv_plot,
-          filename = here::here("data/derived/TEST_NorthernRockies_aoi0_region0/biv_norm2.jpg"))
-tmap_save(tm = bp_norm1_agg$biv_plot,
-          filename = here::here("data/derived/TEST_NorthernRockies_aoi0_region0/biv_norm1.jpg"))
-tmap_save(tm = bp_norm2_log_agg$biv_plot,
-          filename = here::here("data/derived/TEST_NorthernRockies_aoi0_region0/biv_norm2_log.jpg"))
-tmap_save(tm = bp_norm1_log_agg$biv_plot,
-          filename = here::here("data/derived/TEST_NorthernRockies_aoi0_region0/biv_norm1_log.jpg"))
-
-
-
-
-
-
-
+          
