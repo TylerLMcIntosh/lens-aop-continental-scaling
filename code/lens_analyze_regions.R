@@ -42,17 +42,6 @@ install_and_load_packages(
   auto_install = "y"
 )
 
-## Cyverse data store access if applicable ----
-# Copy previous data over from data store if on cyverse and project has been run before
-if(cyverse) {
-  if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data")) {
-    system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data ~/lens-aop-continental-scaling/")
-  }
-  if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/figs")) {
-    system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/figs ~/lens-aop-continental-scaling/")
-  }
-}
-
 
 # Set up necessary data directories
 dir_ensure(here::here("data"))
@@ -66,6 +55,14 @@ dir_ensure(dir_figs)
 #For outputs
 
 options(timeout = 1500)
+
+#If on CyVerse, copy data on CyVerse data store onto instance
+if(cyverse) {
+  if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data")) {
+    system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data ~/lens-aop-continental-scaling/")
+  }  
+}
+
 
 
 ## Download and stream data sources ----
@@ -115,15 +112,15 @@ areas_of_interest <- areas_of_interest |>
 
 
 # MANUALLY CREATE TEST POLYGONS IF DESIRED
-install_and_load_packages(c("mapedit"))
-
-test_rgn <- mapedit::drawFeatures()
-test_rgn <- test_rgn |>
-  sf::st_transform(sf::st_crs(neon_region_polygons))
-
-test_aoi <- mapedit::drawFeatures()
-test_aoi <- test_aoi |>
-  sf::st_transform(sf::st_crs(neon_region_polygons))
+# install_and_load_packages(c("mapedit"))
+# 
+# test_rgn <- mapedit::drawFeatures()
+# test_rgn <- test_rgn |>
+#   sf::st_transform(sf::st_crs(neon_region_polygons))
+# 
+# test_aoi <- mapedit::drawFeatures()
+# test_aoi <- test_aoi |>
+#   sf::st_transform(sf::st_crs(neon_region_polygons))
 
 
 # Operate ----
@@ -232,13 +229,15 @@ conus_aoi <- areas_of_interest |>
 
 
 
-
+# RUN ANALYSIS ----
+dir_output <- here::here("data/output")
+dir_ensure(dir_output)
 
 
 # NEON REGIONS
 tic()
 test_full <- full_representative_categorical_analysis_set(full_run_nm = "FULL_TEST",
-                                                          dir_out = here::here("data/derived"),
+                                                          dir_out = dir_output,
                                                           region_polygons_merged = neon_region_polygons_merged[],
                                                           areas_of_interest_merged = neon_areas_of_interest_merged[],
                                                           region_name_col = "DomainName",
@@ -258,7 +257,7 @@ toc()
 
 tic()
 test_full <- full_representative_categorical_analysis_set(full_run_nm = "FULL_TEST_GROUPED",
-                                                          dir_out = here::here("data/derived"),
+                                                          dir_out = dir_output,
                                                           region_polygons_merged = neon_region_polygons_merged[],
                                                           areas_of_interest_merged = neon_areas_of_interest_merged[],
                                                           region_name_col = "DomainName",
@@ -288,7 +287,7 @@ test_full <- full_representative_categorical_analysis(raster = raster,
                                                       cat_base_column_name = "VALUE",
                                                       out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
                                                       out_rast_type = c("FULL"),
-                                                      out_dir = here::here("data/derived"),
+                                                      out_dir = dir_output,
                                                       new_sub_dir = TRUE,
                                                       min_aoi_coverage = NA,
                                                       min_region_coverage = NA,
@@ -307,7 +306,7 @@ test_full <- full_representative_categorical_analysis(raster = raster_grouped,
                                                       cat_base_column_name = "VALUE",
                                                       out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
                                                       out_rast_type = c("FULL"),
-                                                      out_dir = here::here("data/derived"),
+                                                      out_dir = dir_output,
                                                       new_sub_dir = TRUE,
                                                       min_aoi_coverage = NA,
                                                       min_region_coverage = NA,
@@ -316,18 +315,6 @@ test_full <- full_representative_categorical_analysis(raster = raster_grouped,
                                                       perc_digits = 2,
                                                       raster_return = c("WRITE"))
 toc()
-
-
-
-
-# Move data to cyverse data store if applicable ----
-if(cyverse) {
-  system("cp -r ~/lens-aop-continental-scaling/data ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling")
-  system("cp -r ~/lens-aop-continental-scaling/figs ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling")
-}
-
-
-
 
 
 
@@ -349,7 +336,7 @@ if(cyverse) {
 #                                                       cat_base_column_name = "VALUE",
 #                                                       out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
 #                                                       out_rast_type = c("FULL"),
-#                                                       out_dir = here::here("data/derived"),
+#                                                       out_dir = dir_output,
 #                                                       new_sub_dir = TRUE,
 #                                                       min_aoi_coverage = NA,
 #                                                       min_region_coverage = NA,
@@ -370,7 +357,7 @@ if(cyverse) {
 #                                                       cat_base_column_name = "VALUE",
 #                                                       out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
 #                                                       out_rast_type = c("FULL"),
-#                                                       out_dir = here::here("data/derived"),
+#                                                       out_dir = dir_output,
 #                                                       new_sub_dir = TRUE,
 #                                                       min_aoi_coverage = NA,
 #                                                       min_region_coverage = NA,
@@ -384,7 +371,7 @@ if(cyverse) {
 
 tic()
 test_full <- full_representative_categorical_analysis_set(full_run_nm = "p_test",
-                                                          dir_out = here::here("data/derived"),
+                                                          dir_out = dir_output,
                                                           region_polygons_merged = neon_region_polygons_merged[1:2,],
                                                           areas_of_interest_merged = neon_areas_of_interest_merged[1:2,],
                                                           region_name_col = "DomainName",
@@ -404,4 +391,19 @@ test_full <- full_representative_categorical_analysis_set(full_run_nm = "p_test"
                                                           perc_digits = 2,
                                                           raster_return = c("WRITE"))
 toc()
+
+
+
+# Move outputs to cyverse data store if applicable ----
+if(cyverse) {
+  system("cp -r ~/lens-aop-continental-scaling/data ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling")
+  #system("cp -r ~/lens-aop-continental-scaling/figs ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling")
+}
+
+
+
+
+
+
+
           
