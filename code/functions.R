@@ -3,7 +3,12 @@
 # LENS analyses ----
 
 
-full_representative_categorical_analysis <- function(...) {
+full_representative_categorical_analysis <- function(safe_parallel,
+                                                     n_workers,
+                                                     ...) {
+  if(safe_parallel) {
+    terra::terraOptions(memfrac = 0.8 / n_workers)
+  }
   
   analysis <- representative_categorical_cover_analysis(...)
   
@@ -77,6 +82,7 @@ full_representative_categorical_analysis_set <- function(full_run_nm,
                                                          areas_of_interest_merged,
                                                          region_name_col,
                                                          parallel = FALSE,
+                                                         safe_parallel = FALSE,
                                                          n_workers = NA,
                                                          raster,
                                                          ...) {
@@ -101,7 +107,9 @@ full_representative_categorical_analysis_set <- function(full_run_nm,
                                                    run_name = region_polygons_merged[[region_name_col]]),
                                               full_representative_categorical_analysis,
                                               out_dir = dir_out,
-                                             raster = raster,
+                                               raster = raster,
+                                               safe_parallel = TRUE,
+                                               n_workers = n_workers,
                                               ...)
     future::plan(sequential)
     

@@ -389,6 +389,7 @@ test_full <- full_representative_categorical_analysis_set(full_run_nm = "p_test"
                                                           areas_of_interest_merged = neon_areas_of_interest_merged[1:2,],
                                                           region_name_col = "DomainName",
                                                           parallel = TRUE,
+                                                          safe_parallel = TRUE,
                                                           n_workers = 2,
                                                           raster = terra::wrap(raster),
                                                           raster_cat_df = raster_cats,
