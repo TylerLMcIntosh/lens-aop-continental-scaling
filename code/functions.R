@@ -5,9 +5,10 @@
 
 full_representative_categorical_analysis <- function(safe_parallel,
                                                      n_workers,
+                                                     mem_tot,
                                                      ...) {
   if(safe_parallel) {
-    terra::terraOptions(memfrac = 0.8 / n_workers)
+    terra::terraOptions(memmax = mem_tot / n_workers)
   }
   
   analysis <- representative_categorical_cover_analysis(...)
@@ -84,6 +85,7 @@ full_representative_categorical_analysis_set <- function(full_run_nm,
                                                          parallel = FALSE,
                                                          safe_parallel = FALSE,
                                                          n_workers = NA,
+                                                         mem_tot = 16,
                                                          raster,
                                                          ...) {
   
@@ -109,6 +111,7 @@ full_representative_categorical_analysis_set <- function(full_run_nm,
                                               out_dir = dir_out,
                                                raster = raster,
                                                safe_parallel = TRUE,
+                                               mem_tot = mem_tot,
                                                n_workers = n_workers,
                                               ...)
     future::plan(sequential)
@@ -985,16 +988,16 @@ reclassify_raster_by_group <- function(raster,
   group_levels <- levels(raster_cat_df$group_col)
   group_ids <- seq_along(group_levels)
   
-  # Decide on output datatype
-  if (write_to_disk) {
-    datatype <- if (length(group_ids) <= 255) {
-      message("Writing raster as INT1U (0–255)...")
-      "INT1U"
-    } else {
-      message("Writing raster as INT2S (−32,768 to 32,767)...")
-      "INT2S"
-    }
-  }
+  # # Decide on output datatype
+  # if (write_to_disk) {
+  #   datatype <- if (length(group_ids) <= 255) {
+  #     message("Writing raster as INT1U (0–255)...")
+  #     "INT1U"
+  #   } else {
+  #     message("Writing raster as INT2S (−32,768 to 32,767)...")
+  #     "INT2S"
+  #   }
+  # }
   
   # Create group mapping
   group_map <- tibble::tibble(
@@ -1025,6 +1028,11 @@ reclassify_raster_by_group <- function(raster,
   
   levels(classified) <- new_cat_df
   terra::activeCat(classified) <- group_column
+  
+  #Set datatype
+  max_val <- max(mapping_df$VALUE, na.rm = TRUE)
+  datatype <- if (max_val <= 255) "INT1U" else "INT2S"
+  
   
   # --- Write to disk or return in memory ---
   if (write_to_disk) {

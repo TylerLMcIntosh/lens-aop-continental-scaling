@@ -8,6 +8,7 @@ rm(list = ls())
 ### ### ### ### ### ### ##
 ### SET PARAMETER HERE ###
 cyverse <- TRUE #Set to TRUE for cyverse processing or FALSE for local processing
+mem_tot <- 60 # Set to run on CyVerse since cyverse has problems reading RAM
 ### ### ### ### ### ### ##
 
 options(scipen = 999)
@@ -38,7 +39,8 @@ install_and_load_packages(
     "RColorBrewer",
     "ggtext",
     "patchwork",
-    "grid"),
+    "grid",
+    "memuse"),
   auto_install = "y"
 )
 
@@ -52,9 +54,6 @@ dir_ensure(dir_raw)
 dir_ensure(dir_derived)
 dir_ensure(dir_figs)
 
-#For outputs
-
-options(timeout = 1500)
 
 #If on CyVerse, copy data on CyVerse data store onto instance
 if(cyverse) {
@@ -63,10 +62,18 @@ if(cyverse) {
   }  
 }
 
+#Manage memory
+if(cyverse) {
+  terra::terraOptions(memmax = mem_tot)
+  terra::terraOptions(memfrac = 0.8)
+} else {
+  mem_tot <- memuse::Sys.meminfo()[[1]]
+}
 
 
 ## Download and stream data sources ----
 tic()
+options(timeout = 1500)
 raster <- access_landfire_evt_conus_2022(access = 'download',
                                          dir_path = dir_raw)
 evt_conus_file <- here::here(dir_raw, "LF2022_EVT_230_CONUS/Tif/LC22_EVT_230.tif")
@@ -378,6 +385,7 @@ test_full <- full_representative_categorical_analysis_set(full_run_nm = "p_test"
                                                           parallel = TRUE,
                                                           safe_parallel = TRUE,
                                                           n_workers = 2,
+                                                          mem_tot = mem_tot,
                                                           raster = terra::wrap(raster),
                                                           raster_cat_df = raster_cats,
                                                           cat_base_column_name = "VALUE",
@@ -396,10 +404,9 @@ toc()
 
 # Move outputs to cyverse data store if applicable ----
 if(cyverse) {
-  system("cp -r ~/lens-aop-continental-scaling/data ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling")
+  system("cp -r ~/lens-aop-continental-scaling/data/outputs ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data")
   #system("cp -r ~/lens-aop-continental-scaling/figs ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling")
 }
-
 
 
 
