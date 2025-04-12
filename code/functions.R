@@ -261,7 +261,7 @@ representative_categorical_cover_analysis <- function(raster,
   
   # Make compatible with parallel processing
   if(is.character(raster)) {
-    raster <- terra::rast(raster)
+    raster <- terra::rast(raster, proxy = TRUE)
   } else {
     raster <- terra::unwrap(raster)
   }
