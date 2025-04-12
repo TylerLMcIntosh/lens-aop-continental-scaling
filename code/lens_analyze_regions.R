@@ -375,17 +375,43 @@ toc()
 # toc()
 
 
+# 
+# tic()
+# test_full <- full_representative_categorical_analysis_set(full_run_nm = "p_test",
+#                                                           dir_out = dir_output,
+#                                                           region_polygons_merged = neon_region_polygons_merged[1:2,],
+#                                                           areas_of_interest_merged = neon_areas_of_interest_merged[1:2,],
+#                                                           region_name_col = "DomainName",
+#                                                           parallel = TRUE,
+#                                                           safe_parallel = TRUE,
+#                                                           n_workers = 2,
+#                                                           mem_tot = mem_tot,
+#                                                           raster = terra::wrap(raster),
+#                                                           raster_cat_df = raster_cats,
+#                                                           cat_base_column_name = "VALUE",
+#                                                           out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
+#                                                           out_rast_type = c("FULL"),
+#                                                           new_sub_dir = TRUE,
+#                                                           min_aoi_coverage = NA,
+#                                                           min_region_coverage = NA,
+#                                                           drop_classes = c("Open Water"),
+#                                                           drop_classes_column_name = "EVT_NAME",
+#                                                           perc_digits = 2,
+#                                                           raster_return = c("WRITE"))
+# toc()
+
+
 
 tic()
-test_full <- full_representative_categorical_analysis_set(full_run_nm = "p_test",
+test_full <- full_representative_categorical_analysis_set(full_run_nm = "full_run",
                                                           dir_out = dir_output,
-                                                          region_polygons_merged = neon_region_polygons_merged[1:2,],
-                                                          areas_of_interest_merged = neon_areas_of_interest_merged[1:2,],
+                                                          region_polygons_merged = neon_region_polygons_merged[],
+                                                          areas_of_interest_merged = neon_areas_of_interest_merged[],
                                                           region_name_col = "DomainName",
                                                           parallel = TRUE,
                                                           safe_parallel = TRUE,
-                                                          n_workers = 2,
-                                                          mem_tot = mem_tot,
+                                                          n_workers = 16,
+                                                          mem_tot = mem_tot * 0.7,
                                                           raster = terra::wrap(raster),
                                                           raster_cat_df = raster_cats,
                                                           cat_base_column_name = "VALUE",
@@ -399,7 +425,6 @@ test_full <- full_representative_categorical_analysis_set(full_run_nm = "p_test"
                                                           perc_digits = 2,
                                                           raster_return = c("WRITE"))
 toc()
-
 
 
 # Move outputs to cyverse data store if applicable ----
