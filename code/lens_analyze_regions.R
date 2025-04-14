@@ -20,6 +20,9 @@ library(here)
 
 source(here::here("code", "functions.R"))
 
+options(repos = c(CRAN = "https://packagemanager.posit.co/cran/2025-04-11"))
+Sys.setenv(PAK_NONINTERACTIVE = "true")
+
 install_and_load_packages(
   package_list = c(
     "here",
@@ -50,17 +53,26 @@ dir_ensure(here::here("data"))
 dir_raw <- here::here("data/raw")
 dir_derived <- here::here("data/derived")
 dir_figs <- here::here("figs")
-dir_ensure(dir_raw)
-dir_ensure(dir_derived)
-dir_ensure(dir_figs)
-
+dir_output <- here::here("data/output")
 
 #If on CyVerse, copy data on CyVerse data store onto instance
 if(cyverse) {
-  if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data")) {
-    system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data ~/lens-aop-continental-scaling/")
-  }  
+  if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data/derived") &
+     !dir.exists(dir_derived)) {
+    system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data/derived ~/lens-aop-continental-scaling/data/")
+  } 
+  if(dir.exists("~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data/raw") &
+     !dir.exists(dir_raw)) {
+    system("cp -r ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data/raw ~/lens-aop-continental-scaling/data/")
+  }
 }
+
+#Ensure directory creation
+dir_ensure(dir_raw)
+dir_ensure(dir_derived)
+dir_ensure(dir_figs)
+dir_ensure(dir_output)
+
 
 #Manage memory
 if(cyverse) {
@@ -103,7 +115,8 @@ if(!file.exists(r_grp_fl)) {
 }
 
 raster_grouped <- terra::rast(r_grp_fl)
-raster_cats_grouped <- readr::read_csv(r_grp_cat_fl)
+raster_cats_grouped <- readr::read_csv(r_grp_cat_fl) |>
+  as.data.frame()
 
 
 # Get CONUS bounds to spatial subset
@@ -166,37 +179,37 @@ sf::st_write(neon_areas_of_interest_merged, neon_areas_of_interest_merged_file, 
 
 
 
-#Set up to use EPA ecoregions as well
-epa_region_polygons_merged <- epa_region_polygons |>
-  sf::st_cast("POLYGON") |> #split out multipolygons
-  sf::st_make_valid() %>%
-  dplyr::filter(sf::st_intersects(., conus, sparse = FALSE)) |>
-  dplyr::group_by(NA_L2CODE, NA_L2KEY) |>
-  dplyr::summarise(geometry = sf::st_union(geometry)) |>
-  dplyr::ungroup() |>
-  dplyr::arrange(NA_L2KEY) |>
-  dplyr::filter(NA_L2CODE != "0.0") |>
-  sf::st_intersection(conus)
-
-epa_areas_of_interest_merged <- areas_of_interest |>
-  sf::st_intersection(epa_region_polygons_merged) |>
-  dplyr::group_by(NA_L2CODE, NA_L2KEY) |>
-  dplyr::summarise(geometry = sf::st_union(geometry)) |>
-  dplyr::ungroup() |>
-  dplyr::arrange(NA_L2KEY)
-
-#Ensure that the same sets are in both
-common_epa_ids <- lubridate::intersect(epa_region_polygons_merged$NA_L2KEY, epa_areas_of_interest_merged$NA_L2KEY)
-epa_region_polygons_merged <- epa_region_polygons_merged %>%
-  dplyr::filter(NA_L2KEY %in% common_epa_ids)
-epa_areas_of_interest_merged <- epa_areas_of_interest_merged %>%
-  dplyr::filter(NA_L2KEY %in% common_epa_ids)
-
-epa_region_polygons_merged_file <- here::here(dir_derived, "epa_region_polygons_merged.gpkg")
-sf::st_write(epa_region_polygons_merged, epa_region_polygons_merged_file, append = FALSE)
-
-epa_areas_of_interest_merged_file <- here::here(dir_derived, "epa_areas_of_interest_merged.gpkg")
-sf::st_write(epa_areas_of_interest_merged, epa_areas_of_interest_merged_file, append = FALSE)
+# #Set up to use EPA ecoregions as well
+# epa_region_polygons_merged <- epa_region_polygons |>
+#   sf::st_cast("POLYGON") |> #split out multipolygons
+#   sf::st_make_valid() %>%
+#   dplyr::filter(sf::st_intersects(., conus, sparse = FALSE)) |>
+#   dplyr::group_by(NA_L2CODE, NA_L2KEY) |>
+#   dplyr::summarise(geometry = sf::st_union(geometry)) |>
+#   dplyr::ungroup() |>
+#   dplyr::arrange(NA_L2KEY) |>
+#   dplyr::filter(NA_L2CODE != "0.0") |>
+#   sf::st_intersection(conus)
+# 
+# epa_areas_of_interest_merged <- areas_of_interest |>
+#   sf::st_intersection(epa_region_polygons_merged) |>
+#   dplyr::group_by(NA_L2CODE, NA_L2KEY) |>
+#   dplyr::summarise(geometry = sf::st_union(geometry)) |>
+#   dplyr::ungroup() |>
+#   dplyr::arrange(NA_L2KEY)
+# 
+# #Ensure that the same sets are in both
+# common_epa_ids <- lubridate::intersect(epa_region_polygons_merged$NA_L2KEY, epa_areas_of_interest_merged$NA_L2KEY)
+# epa_region_polygons_merged <- epa_region_polygons_merged %>%
+#   dplyr::filter(NA_L2KEY %in% common_epa_ids)
+# epa_areas_of_interest_merged <- epa_areas_of_interest_merged %>%
+#   dplyr::filter(NA_L2KEY %in% common_epa_ids)
+# 
+# epa_region_polygons_merged_file <- here::here(dir_derived, "epa_region_polygons_merged.gpkg")
+# sf::st_write(epa_region_polygons_merged, epa_region_polygons_merged_file, append = FALSE)
+# 
+# epa_areas_of_interest_merged_file <- here::here(dir_derived, "epa_areas_of_interest_merged.gpkg")
+# sf::st_write(epa_areas_of_interest_merged, epa_areas_of_interest_merged_file, append = FALSE)
 
 
 ## Prep to run analyses ----
@@ -237,53 +250,101 @@ conus_aoi <- areas_of_interest |>
 
 
 # RUN ANALYSIS ----
-dir_output <- here::here("data/output")
-dir_ensure(dir_output)
+
 
 
 # NEON REGIONS
-tic()
-test_full <- full_representative_categorical_analysis_set(full_run_nm = "FULL_TEST",
-                                                          dir_out = dir_output,
-                                                          region_polygons_merged = neon_region_polygons_merged[],
-                                                          areas_of_interest_merged = neon_areas_of_interest_merged[],
-                                                          region_name_col = "DomainName",
-                                                          raster = raster,
-                                                          raster_cat_df = raster_cats,
-                                                          cat_base_column_name = "VALUE",
-                                                          out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
-                                                          out_rast_type = c("FULL"),
-                                                          new_sub_dir = TRUE,
-                                                          min_aoi_coverage = NA,
-                                                          min_region_coverage = NA,
-                                                          drop_classes = c("Open Water"),
-                                                          drop_classes_column_name = "EVT_NAME",
-                                                          perc_digits = 2,
-                                                          raster_return = c("WRITE"))
-toc()
+# tic()
+# test_full <- full_representative_categorical_analysis_set(full_run_nm = "FULL_TEST",
+#                                                           dir_out = dir_output,
+#                                                           region_polygons_merged = neon_region_polygons_merged[],
+#                                                           areas_of_interest_merged = neon_areas_of_interest_merged[],
+#                                                           region_name_col = "DomainName",
+#                                                           raster = raster,
+#                                                           raster_cat_df = raster_cats,
+#                                                           cat_base_column_name = "VALUE",
+#                                                           out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
+#                                                           out_rast_type = c("FULL"),
+#                                                           new_sub_dir = TRUE,
+#                                                           min_aoi_coverage = NA,
+#                                                           min_region_coverage = NA,
+#                                                           drop_classes = c("Open Water"),
+#                                                           drop_classes_column_name = "EVT_NAME",
+#                                                           perc_digits = 2,
+#                                                           raster_return = c("WRITE"))
+# toc()
+# 
+# tic()
+# test_full <- full_representative_categorical_analysis_set(full_run_nm = "FULL_TEST_GROUPED",
+#                                                           dir_out = dir_output,
+#                                                           region_polygons_merged = neon_region_polygons_merged[],
+#                                                           areas_of_interest_merged = neon_areas_of_interest_merged[],
+#                                                           region_name_col = "DomainName",
+#                                                           raster = raster_grouped,
+#                                                           raster_cat_df = raster_cats_grouped,
+#                                                           cat_base_column_name = "VALUE",
+#                                                           out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
+#                                                           out_rast_type = c("FULL"),
+#                                                           new_sub_dir = TRUE,
+#                                                           min_aoi_coverage = NA,
+#                                                           min_region_coverage = NA,
+#                                                           drop_classes = c("Open Water"),
+#                                                           drop_classes_column_name = "EVT_GP_N",
+#                                                           perc_digits = 2,
+#                                                           raster_return = c("WRITE"))
+# toc()
+# 
+# 
+# # CONUS
+# 
+# tic()
+# test_full <- full_representative_categorical_analysis(raster = raster,
+#                                                       raster_cat_df = raster_cats,
+#                                                       region_shape = conus_epa_clean,
+#                                                       aoi_shape = conus_aoi,
+#                                                       run_name = "CONUS",
+#                                                       cat_base_column_name = "VALUE",
+#                                                       out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
+#                                                       out_rast_type = c("FULL"),
+#                                                       out_dir = dir_output,
+#                                                       new_sub_dir = TRUE,
+#                                                       min_aoi_coverage = NA,
+#                                                       min_region_coverage = NA,
+#                                                       drop_classes = c("Open Water"),
+#                                                       drop_classes_column_name = "EVT_NAME",
+#                                                       perc_digits = 2,
+#                                                       raster_return = c("WRITE"))
+# toc()
+# 
+# tic()
+# test_full <- full_representative_categorical_analysis(raster = raster_grouped,
+#                                                       raster_cat_df = raster_cats_grouped,
+#                                                       region_shape = conus_epa_clean,
+#                                                       aoi_shape = conus_aoi,
+#                                                       run_name = "CONUS_GP",
+#                                                       cat_base_column_name = "VALUE",
+#                                                       out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
+#                                                       out_rast_type = c("FULL"),
+#                                                       out_dir = dir_output,
+#                                                       new_sub_dir = TRUE,
+#                                                       min_aoi_coverage = NA,
+#                                                       min_region_coverage = NA,
+#                                                       drop_classes = c("Open Water"),
+#                                                       drop_classes_column_name = "EVT_GP_N",
+#                                                       perc_digits = 2,
+#                                                       raster_return = c("WRITE"))
+# toc()
 
-tic()
-test_full <- full_representative_categorical_analysis_set(full_run_nm = "FULL_TEST_GROUPED",
-                                                          dir_out = dir_output,
-                                                          region_polygons_merged = neon_region_polygons_merged[],
-                                                          areas_of_interest_merged = neon_areas_of_interest_merged[],
-                                                          region_name_col = "DomainName",
-                                                          raster = raster_grouped,
-                                                          raster_cat_df = raster_cats_grouped,
-                                                          cat_base_column_name = "VALUE",
-                                                          out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
-                                                          out_rast_type = c("FULL"),
-                                                          new_sub_dir = TRUE,
-                                                          min_aoi_coverage = NA,
-                                                          min_region_coverage = NA,
-                                                          drop_classes = c("Open Water"),
-                                                          drop_classes_column_name = "EVT_GP_N",
-                                                          perc_digits = 2,
-                                                          raster_return = c("WRITE"))
-toc()
 
 
-# CONUS
+
+
+
+
+
+
+
+
 
 tic()
 test_full <- full_representative_categorical_analysis(raster = raster,
@@ -304,12 +365,12 @@ test_full <- full_representative_categorical_analysis(raster = raster,
                                                       raster_return = c("WRITE"))
 toc()
 
-tic()
+tic() #91 minutes
 test_full <- full_representative_categorical_analysis(raster = raster_grouped,
                                                       raster_cat_df = raster_cats_grouped,
                                                       region_shape = conus_epa_clean,
                                                       aoi_shape = conus_aoi,
-                                                      run_name = "CONUS_GP",
+                                                      run_name = "CONUS_grp",
                                                       cat_base_column_name = "VALUE",
                                                       out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
                                                       out_rast_type = c("FULL"),
@@ -324,95 +385,17 @@ test_full <- full_representative_categorical_analysis(raster = raster_grouped,
 toc()
 
 
-
-
-
-
-
-
-
-
-# 
-# 
-# tic()
-# test_full <- full_representative_categorical_analysis(raster = raster,
-#                                                       raster_cat_df = raster_cats,
-#                                                       region_shape = test_rgn,
-#                                                       aoi_shape = test_aoi,
-#                                                       run_name = "test_raw",
-#                                                       cat_base_column_name = "VALUE",
-#                                                       out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
-#                                                       out_rast_type = c("FULL"),
-#                                                       out_dir = dir_output,
-#                                                       new_sub_dir = TRUE,
-#                                                       min_aoi_coverage = NA,
-#                                                       min_region_coverage = NA,
-#                                                       drop_classes = NA,
-#                                                       drop_classes_column_name = NA,
-#                                                       perc_digits = 2,
-#                                                       raster_return = c("WRITE"))
-# toc()
-# 
-# 
-# 
-# tic()
-# test_full <- full_representative_categorical_analysis(raster = raster_grouped,
-#                                                       raster_cat_df = raster_cats_grouped,
-#                                                       region_shape = test_rgn,
-#                                                       aoi_shape = test_aoi,
-#                                                       run_name = "test_gp",
-#                                                       cat_base_column_name = "VALUE",
-#                                                       out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
-#                                                       out_rast_type = c("FULL"),
-#                                                       out_dir = dir_output,
-#                                                       new_sub_dir = TRUE,
-#                                                       min_aoi_coverage = NA,
-#                                                       min_region_coverage = NA,
-#                                                       drop_classes = NA,
-#                                                       drop_classes_column_name = NA,
-#                                                       perc_digits = 2,
-#                                                       raster_return = c("WRITE"))
-# toc()
-
-
-# 
-# tic()
-# test_full <- full_representative_categorical_analysis_set(full_run_nm = "p_test",
-#                                                           dir_out = dir_output,
-#                                                           region_polygons_merged = neon_region_polygons_merged[1:2,],
-#                                                           areas_of_interest_merged = neon_areas_of_interest_merged[1:2,],
-#                                                           region_name_col = "DomainName",
-#                                                           parallel = TRUE,
-#                                                           safe_parallel = TRUE,
-#                                                           n_workers = 2,
-#                                                           mem_tot = mem_tot,
-#                                                           raster = terra::wrap(raster),
-#                                                           raster_cat_df = raster_cats,
-#                                                           cat_base_column_name = "VALUE",
-#                                                           out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
-#                                                           out_rast_type = c("FULL"),
-#                                                           new_sub_dir = TRUE,
-#                                                           min_aoi_coverage = NA,
-#                                                           min_region_coverage = NA,
-#                                                           drop_classes = c("Open Water"),
-#                                                           drop_classes_column_name = "EVT_NAME",
-#                                                           perc_digits = 2,
-#                                                           raster_return = c("WRITE"))
-# toc()
-
-
-
 tic()
-test_full <- full_representative_categorical_analysis_set(full_run_nm = "full_run",
+test_full <- full_representative_categorical_analysis_set(full_run_nm = "full_run_2",
                                                           dir_out = dir_output,
                                                           region_polygons_merged = neon_region_polygons_merged[],
                                                           areas_of_interest_merged = neon_areas_of_interest_merged[],
                                                           region_name_col = "DomainName",
-                                                          parallel = TRUE,
-                                                          safe_parallel = TRUE,
+                                                          parallel = FALSE,
+                                                          safe_parallel = FALSE,
                                                           n_workers = 16,
                                                           mem_tot = mem_tot * 0.7,
-                                                          raster = evt_conus_file,
+                                                          raster = raster,
                                                           raster_cat_df = raster_cats,
                                                           cat_base_column_name = "VALUE",
                                                           out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
@@ -427,11 +410,40 @@ test_full <- full_representative_categorical_analysis_set(full_run_nm = "full_ru
 toc()
 
 
+
+tic()
+test_full <- full_representative_categorical_analysis_set(full_run_nm = "full_run_grp",
+                                                          dir_out = dir_output,
+                                                          region_polygons_merged = neon_region_polygons_merged[],
+                                                          areas_of_interest_merged = neon_areas_of_interest_merged[],
+                                                          region_name_col = "DomainName",
+                                                          parallel = FALSE,
+                                                          safe_parallel = FALSE,
+                                                          n_workers = 16,
+                                                          mem_tot = mem_tot * 0.7,
+                                                          raster = raster_grouped,
+                                                          raster_cat_df = raster_cats_grouped,
+                                                          cat_base_column_name = "VALUE",
+                                                          out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
+                                                          out_rast_type = c("FULL"),
+                                                          new_sub_dir = TRUE,
+                                                          min_aoi_coverage = NA,
+                                                          min_region_coverage = NA,
+                                                          drop_classes = c("Open Water"),
+                                                          drop_classes_column_name = "EVT_GP_N",
+                                                          perc_digits = 2,
+                                                          raster_return = c("WRITE"))
+toc()
+
+
 # Move outputs to cyverse data store if applicable ----
 if(cyverse) {
-  system("cp -r ~/lens-aop-continental-scaling/data/outputs ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data")
+  system("cp -r ~/lens-aop-continental-scaling/data/output ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data")
   #system("cp -r ~/lens-aop-continental-scaling/figs ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling")
 }
+
+
+write_session_info(here::here(dir_output, 'session_info.txt'))
 
 
 
