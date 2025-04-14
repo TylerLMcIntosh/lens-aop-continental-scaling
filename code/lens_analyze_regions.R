@@ -251,100 +251,7 @@ conus_aoi <- areas_of_interest |>
 
 # RUN ANALYSIS ----
 
-
-
-# NEON REGIONS
-# tic()
-# test_full <- full_representative_categorical_analysis_set(full_run_nm = "FULL_TEST",
-#                                                           dir_out = dir_output,
-#                                                           region_polygons_merged = neon_region_polygons_merged[],
-#                                                           areas_of_interest_merged = neon_areas_of_interest_merged[],
-#                                                           region_name_col = "DomainName",
-#                                                           raster = raster,
-#                                                           raster_cat_df = raster_cats,
-#                                                           cat_base_column_name = "VALUE",
-#                                                           out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
-#                                                           out_rast_type = c("FULL"),
-#                                                           new_sub_dir = TRUE,
-#                                                           min_aoi_coverage = NA,
-#                                                           min_region_coverage = NA,
-#                                                           drop_classes = c("Open Water"),
-#                                                           drop_classes_column_name = "EVT_NAME",
-#                                                           perc_digits = 2,
-#                                                           raster_return = c("WRITE"))
-# toc()
-# 
-# tic()
-# test_full <- full_representative_categorical_analysis_set(full_run_nm = "FULL_TEST_GROUPED",
-#                                                           dir_out = dir_output,
-#                                                           region_polygons_merged = neon_region_polygons_merged[],
-#                                                           areas_of_interest_merged = neon_areas_of_interest_merged[],
-#                                                           region_name_col = "DomainName",
-#                                                           raster = raster_grouped,
-#                                                           raster_cat_df = raster_cats_grouped,
-#                                                           cat_base_column_name = "VALUE",
-#                                                           out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
-#                                                           out_rast_type = c("FULL"),
-#                                                           new_sub_dir = TRUE,
-#                                                           min_aoi_coverage = NA,
-#                                                           min_region_coverage = NA,
-#                                                           drop_classes = c("Open Water"),
-#                                                           drop_classes_column_name = "EVT_GP_N",
-#                                                           perc_digits = 2,
-#                                                           raster_return = c("WRITE"))
-# toc()
-# 
-# 
-# # CONUS
-# 
-# tic()
-# test_full <- full_representative_categorical_analysis(raster = raster,
-#                                                       raster_cat_df = raster_cats,
-#                                                       region_shape = conus_epa_clean,
-#                                                       aoi_shape = conus_aoi,
-#                                                       run_name = "CONUS",
-#                                                       cat_base_column_name = "VALUE",
-#                                                       out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
-#                                                       out_rast_type = c("FULL"),
-#                                                       out_dir = dir_output,
-#                                                       new_sub_dir = TRUE,
-#                                                       min_aoi_coverage = NA,
-#                                                       min_region_coverage = NA,
-#                                                       drop_classes = c("Open Water"),
-#                                                       drop_classes_column_name = "EVT_NAME",
-#                                                       perc_digits = 2,
-#                                                       raster_return = c("WRITE"))
-# toc()
-# 
-# tic()
-# test_full <- full_representative_categorical_analysis(raster = raster_grouped,
-#                                                       raster_cat_df = raster_cats_grouped,
-#                                                       region_shape = conus_epa_clean,
-#                                                       aoi_shape = conus_aoi,
-#                                                       run_name = "CONUS_GP",
-#                                                       cat_base_column_name = "VALUE",
-#                                                       out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
-#                                                       out_rast_type = c("FULL"),
-#                                                       out_dir = dir_output,
-#                                                       new_sub_dir = TRUE,
-#                                                       min_aoi_coverage = NA,
-#                                                       min_region_coverage = NA,
-#                                                       drop_classes = c("Open Water"),
-#                                                       drop_classes_column_name = "EVT_GP_N",
-#                                                       perc_digits = 2,
-#                                                       raster_return = c("WRITE"))
-# toc()
-
-
-
-
-
-
-
-
-
-
-
+# Full CONUS, grouped and ungrouped
 
 tic()
 test_full <- full_representative_categorical_analysis(raster = raster,
@@ -383,6 +290,30 @@ test_full <- full_representative_categorical_analysis(raster = raster_grouped,
                                                       perc_digits = 2,
                                                       raster_return = c("WRITE"))
 toc()
+
+
+# By NEON region, grouped and ungrouped
+
+
+tic()
+test_full <- full_representative_categorical_analysis(raster = raster,
+                                                      raster_cat_df = raster_cats,
+                                                      region_shape = neon_region_polygons_merged[1,],
+                                                      aoi_shape = neon_areas_of_interest_merged[1,],
+                                                      run_name = "TEST_ALONE",
+                                                      cat_base_column_name = "VALUE",
+                                                      out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
+                                                      out_rast_type = c("FULL"),
+                                                      out_dir = dir_output,
+                                                      new_sub_dir = TRUE,
+                                                      min_aoi_coverage = NA,
+                                                      min_region_coverage = NA,
+                                                      drop_classes = c("Open Water"),
+                                                      drop_classes_column_name = "EVT_NAME",
+                                                      perc_digits = 2,
+                                                      raster_return = c("WRITE"))
+toc()
+
 
 
 tic()
@@ -435,13 +366,14 @@ test_full <- full_representative_categorical_analysis_set(full_run_nm = "full_ru
                                                           raster_return = c("WRITE"))
 toc()
 
+system("cp -r ~/lens-aop-continental-scaling/data/output/full_run_grp ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data/output/")
 
-# Move outputs to cyverse data store if applicable ----
+
+
 if(cyverse) {
   system("cp -r ~/lens-aop-continental-scaling/data/output ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling/data")
   #system("cp -r ~/lens-aop-continental-scaling/figs ~/data-store/data/iplant/home/shared/earthlab/macrosystems/lens-aop-continental-scaling")
 }
-
 
 write_session_info(here::here(dir_output, 'session_info.txt'))
 
