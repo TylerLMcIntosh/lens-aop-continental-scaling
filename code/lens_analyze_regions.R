@@ -7,7 +7,7 @@ rm(list = ls())
 
 ### ### ### ### ### ### ##
 ### SET PARAMETER HERE ###
-cyverse <- TRUE #Set to TRUE for cyverse processing or FALSE for local processing
+cyverse <- FALSE #Set to TRUE for cyverse processing or FALSE for local processing
 mem_tot <- 60 # Set to run on CyVerse since cyverse has problems reading RAM
 ### ### ### ### ### ### ##
 
@@ -20,7 +20,9 @@ library(here)
 
 source(here::here("code", "functions.R"))
 
-options(repos = c(CRAN = "https://packagemanager.posit.co/cran/2025-04-11"))
+if(cyverse) {
+  options(repos = c(CRAN = "https://packagemanager.posit.co/cran/2025-04-11"))
+}
 Sys.setenv(PAK_NONINTERACTIVE = "true")
 
 install_and_load_packages(
@@ -294,25 +296,25 @@ toc()
 
 # By NEON region, grouped and ungrouped
 
-
-tic()
-test_full <- full_representative_categorical_analysis(raster = raster,
-                                                      raster_cat_df = raster_cats,
-                                                      region_shape = neon_region_polygons_merged[1,],
-                                                      aoi_shape = neon_areas_of_interest_merged[1,],
-                                                      run_name = "TEST_ALONE",
-                                                      cat_base_column_name = "VALUE",
-                                                      out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
-                                                      out_rast_type = c("FULL"),
-                                                      out_dir = dir_output,
-                                                      new_sub_dir = TRUE,
-                                                      min_aoi_coverage = NA,
-                                                      min_region_coverage = NA,
-                                                      drop_classes = c("Open Water"),
-                                                      drop_classes_column_name = "EVT_NAME",
-                                                      perc_digits = 2,
-                                                      raster_return = c("WRITE"))
-toc()
+# 
+# tic()
+# test_full <- full_representative_categorical_analysis(raster = raster,
+#                                                       raster_cat_df = raster_cats,
+#                                                       region_shape = neon_region_polygons_merged[1,],
+#                                                       aoi_shape = neon_areas_of_interest_merged[1,],
+#                                                       run_name = "TEST_ALONE",
+#                                                       cat_base_column_name = "VALUE",
+#                                                       out_rast_values = c("PERC_COVER_AOI", "PERC_COVER_REGION"),
+#                                                       out_rast_type = c("FULL"),
+#                                                       out_dir = dir_output,
+#                                                       new_sub_dir = TRUE,
+#                                                       min_aoi_coverage = NA,
+#                                                       min_region_coverage = NA,
+#                                                       drop_classes = c("Open Water"),
+#                                                       drop_classes_column_name = "EVT_NAME",
+#                                                       perc_digits = 2,
+#                                                       raster_return = c("WRITE"))
+# toc()
 
 
 
@@ -345,8 +347,8 @@ toc()
 tic()
 test_full <- full_representative_categorical_analysis_set(full_run_nm = "full_run_grp",
                                                           dir_out = dir_output,
-                                                          region_polygons_merged = neon_region_polygons_merged[],
-                                                          areas_of_interest_merged = neon_areas_of_interest_merged[],
+                                                          region_polygons_merged = neon_region_polygons_merged[8:16,],
+                                                          areas_of_interest_merged = neon_areas_of_interest_merged[8:16,],
                                                           region_name_col = "DomainName",
                                                           parallel = FALSE,
                                                           safe_parallel = FALSE,

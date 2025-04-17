@@ -52,8 +52,8 @@ full_representative_categorical_analysis <- function(safe_parallel = FALSE,
   region <- terra::rast(analysis$raster_file_names$full$PERC_COVER_REGION)
   aoi <- terra::rast(analysis$raster_file_names$full$PERC_COVER_AOI)
   
-  bp_norm2_log_agg <- bivariate_raster_viz_3(x = log1p(terra::aggregate(region, fact = 30, fun = "median")),
-                                             y = log1p(terra::aggregate(aoi, fact = 30, fun = "median")),
+  bp_norm2_log_agg <- bivariate_raster_viz_3(x = log1p(terra::aggregate(region, fact = 30, fun = "median", na.rm = TRUE)),
+                                             y = log1p(terra::aggregate(aoi, fact = 30, fun = "median", na.rm = TRUE)),
                                              bi_normal = TRUE,
                                              pals_pal = pals::brewer.seqseq2(n = 9),
                                              flip = FALSE,
@@ -62,13 +62,13 @@ full_representative_categorical_analysis <- function(safe_parallel = FALSE,
                                              title = paste0(nm, ": \nAggregated and log-transformed bivariate coverage map, bi-normalized"))
   
   terra::writeRaster(bp_norm2_log_agg$biv_rgb,
-                     filename = here::here(analysis$params$out_dir, 'biv_rgb.tif'))
+                     filename = here::here(analysis$params$out_dir, paste0(nm, '_biv_rgb.tif')))
   tmap_save(tm = bp_norm2_log_agg$biv_plot,
-            filename = here::here(analysis$params$out_dir, paste0(nm, 'biv_norm2_log.jpg')))
+            filename = here::here(analysis$params$out_dir, paste0(nm, '_biv_norm2_log.jpg')))
   ggsave(plot = bp_norm2_log_agg$legend,
          filename = here::here(analysis$params$out_dir, 'biv_legend.jpg'))
   
-  readr::write_csv(results$stats, here::here(analysis$params$out_dir, 'overall_stats.csv'))
+  readr::write_csv(results$stats, here::here(analysis$params$out_dir, paste0(nm,'_overall_stats.csv')))
   
   if(write_session_info) {
     write_session_info(here::here(analysis$params$out_dir, 'session_info.txt'))
