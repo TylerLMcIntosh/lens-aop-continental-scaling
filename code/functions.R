@@ -1768,27 +1768,6 @@ create_operating_area <- function(ranger, ecoRegion) {
 
 # Generating AOP tile polygons ----
 
-# Helper function to determine the appropriate NAD83 UTM zone EPSG code for a given polygon
-find_nad83_utm_epsg <- function(polygon) {
-  
-  # Ensure the polygon is in WGS84 (EPSG:4326) for accurate longitude calculation
-  polygonWgs84 <- sf::st_transform(polygon, crs = 4326)
-  
-  # Calculate the centroid
-  centroid <- sf::st_centroid(polygonWgs84)
-  centroidCoords <- sf::st_coordinates(centroid)
-  
-  # Get the longitude of the centroid
-  longitude <- centroidCoords[1, "X"]
-  
-  # Calculate the UTM zone
-  utmZone <- (floor((longitude + 180) / 6) %% 60) + 1
-  
-  # Determine the EPSG code for NAD83 UTM zone
-  epsgCode <- 26900 + utmZone
-  
-  return(epsgCode)
-}
 
 
 # A function to generate a gridded set of polygons representing AOP image tiles for a NEON AOP footprint (the given aoi)
@@ -2797,7 +2776,7 @@ access_data_epa_l2_ecoregions_vsi <- function() {
 access_data_epa_l3_ecoregions_vsi <- function() {
   epa_l3 <- paste0(
     "/vsizip/vsicurl/",
-    "https://gaftp.epa.gov/EPADataCommons/ORD/Ecoregions/us/us_eco_l3.zip",
+    "https://dmap-prod-oms-edc.s3.us-east-1.amazonaws.com/ORD/Ecoregions/us/us_eco_l3.zip",
     "/us_eco_l3.shp"
   ) |>
     sf::st_read()
